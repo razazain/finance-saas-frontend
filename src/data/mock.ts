@@ -1,0 +1,97 @@
+import type { AppData, AuditLog, Bill, Category, DocumentItem, Invoice, Party, Payment, RecurringRule, Transaction } from '@/types';
+
+const payment = (id: string, date: string, amount: string, accountId: string, categoryId: string, reference: string, transactionId: string, status: Payment['status'] = 'Recorded'): Payment => ({ id, date, amount, accountId, categoryId, reference, status, transactionId, notes: 'Recorded through the workspace' });
+
+export const seedData: AppData = {
+  accounts: [
+    { id: 'acc_bank', name: 'Main Bank', type: 'Bank', currency: 'PKR', openingBalance: '250000.00', currentBalance: '680000.00', description: 'Primary business bank account', status: 'Active' },
+    { id: 'acc_cash', name: 'Cash', type: 'Cash', currency: 'PKR', openingBalance: '90000.00', currentBalance: '145500.00', description: 'Office cash and petty cash', status: 'Active' },
+    { id: 'acc_wallet', name: 'Business Wallet', type: 'Wallet', currency: 'PKR', openingBalance: '35000.00', currentBalance: '72000.00', description: 'Business digital wallet', status: 'Active' },
+    { id: 'acc_tax', name: 'Opening Balance Clearing', type: 'Other', currency: 'PKR', openingBalance: '0.00', currentBalance: '0.00', description: 'System account', status: 'Active', isSystem: true },
+  ],
+  categories: [
+    { id: 'cat_sales', name: 'Sales Revenue', type: 'Income', description: 'Sales and service income', status: 'Active', isSystem: true },
+    { id: 'cat_services', name: 'Service Income', type: 'Income', description: 'Service and consulting income', status: 'Active' },
+    { id: 'cat_rent', name: 'Office Rent', type: 'Expense', description: 'Office and workspace rent', status: 'Active', isSystem: true },
+    { id: 'cat_goods', name: 'Cost of Goods', type: 'Expense', description: 'Products and packaging', status: 'Active' },
+    { id: 'cat_payroll', name: 'Payroll', type: 'Expense', description: 'Employee compensation', status: 'Active' },
+    { id: 'cat_utilities', name: 'Rent & Utilities', type: 'Expense', description: 'Utilities, internet and bills', status: 'Active' },
+    { id: 'cat_ops', name: 'Operations', type: 'Expense', description: 'General operating expenses', status: 'Active' },
+    { id: 'cat_travel', name: 'Travel', type: 'Expense', description: 'Local business travel', status: 'Active' },
+  ],
+  parties: [
+    { id: 'party_cust1', name: 'Al-Farah Foods', company: 'Al-Farah Foods', type: 'Customer', email: 'accounts@alfarah.example', phone: '+92 300 555 0112', address: 'Shahrah-e-Faisal, Karachi', taxNumber: 'NTN-752001', status: 'Active' },
+    { id: 'party_cust2', name: 'Metro Supplies', company: 'Metro Supplies Ltd.', type: 'Customer', email: 'finance@metrosupplies.example', phone: '+92 321 555 0194', address: 'Clifton, Karachi', status: 'Active' },
+    { id: 'party_cust3', name: 'Zainab Boutique', company: 'Zainab Boutique', type: 'Customer', email: 'hello@zainabboutique.example', phone: '+92 333 555 0176', status: 'Active' },
+    { id: 'party_vend1', name: 'Pak Packaging', company: 'Pak Packaging Co.', type: 'Vendor', email: 'billing@pakpackaging.example', phone: '+92 301 555 0188', address: 'Korangi Industrial Area, Karachi', taxNumber: 'NTN-534322', status: 'Active' },
+    { id: 'party_vend2', name: 'City Office Supplies', company: 'City Office Supplies', type: 'Vendor', email: 'accounts@cityoffice.example', phone: '+92 322 555 0160', address: 'Saddar, Karachi', status: 'Active' },
+    { id: 'party_both1', name: 'Northstar Services', company: 'Northstar Services', type: 'Both', email: 'billing@northstar.example', phone: '+92 333 111 2200', status: 'Active' },
+  ],
+  transactions: [
+    { id: 'txn_001', date: '2026-10-12', type: 'Income', description: 'Customer payment — Al-Farah Foods', accountId: 'acc_bank', categoryId: 'cat_sales', amount: '185000.00', currency: 'PKR', status: 'Posted', reference: 'RCPT-1041', source: 'invoice-payment', createdBy: 'Ayesha Rahman' },
+    { id: 'txn_002', date: '2026-10-11', type: 'Expense', description: 'Monthly office rent', accountId: 'acc_bank', categoryId: 'cat_rent', amount: '85000.00', currency: 'PKR', status: 'Posted', reference: 'RENT-OCT', source: 'manual', createdBy: 'Ayesha Rahman' },
+    { id: 'txn_003', date: '2026-10-10', type: 'Transfer', description: 'Cash float replenishment', accountId: 'acc_bank', destinationAccountId: 'acc_cash', amount: '40000.00', currency: 'PKR', status: 'Posted', reference: 'TRF-0092', source: 'manual', createdBy: 'Hamza Siddiqui' },
+    { id: 'txn_004', date: '2026-10-09', type: 'Expense', description: 'Packaging stock', accountId: 'acc_wallet', categoryId: 'cat_goods', amount: '62450.00', currency: 'PKR', status: 'Posted', reference: 'PAY-307', source: 'bill-payment', createdBy: 'Ayesha Rahman' },
+    { id: 'txn_005', date: '2026-10-08', type: 'Income', description: 'Invoice INV-000184 payment', accountId: 'acc_bank', categoryId: 'cat_sales', amount: '124750.00', currency: 'PKR', status: 'Posted', reference: 'RCPT-1038', source: 'invoice-payment', createdBy: 'Ayesha Rahman' },
+    { id: 'txn_006', date: '2026-10-07', type: 'Expense', description: 'Internet and utilities', accountId: 'acc_bank', categoryId: 'cat_utilities', amount: '14600.00', currency: 'PKR', status: 'Posted', reference: 'UTIL-1007', source: 'manual', createdBy: 'Mariam Khan' },
+    { id: 'txn_007', date: '2026-10-06', type: 'Income', description: 'Consulting services', accountId: 'acc_cash', categoryId: 'cat_services', amount: '48000.00', currency: 'PKR', status: 'Posted', reference: 'SRV-210', source: 'manual', createdBy: 'Ayesha Rahman' },
+    { id: 'txn_008', date: '2026-10-04', type: 'Expense', description: 'Packaging adjustment', accountId: 'acc_bank', categoryId: 'cat_goods', amount: '18500.00', currency: 'PKR', status: 'Voided', reference: 'PAY-299', source: 'manual', createdBy: 'Ayesha Rahman', voidReason: 'Duplicate entry' },
+    { id: 'txn_009', date: '2026-09-25', type: 'Income', description: 'Invoice INV-000186 payment', accountId: 'acc_bank', categoryId: 'cat_sales', amount: '98000.00', currency: 'PKR', status: 'Posted', reference: 'RCPT-1022', source: 'invoice-payment', createdBy: 'Ayesha Rahman' },
+    { id: 'txn_010', date: '2026-09-29', type: 'Expense', description: 'Bill BILL-000309 payment', accountId: 'acc_bank', categoryId: 'cat_goods', amount: '28900.00', currency: 'PKR', status: 'Posted', reference: 'PAY-294', source: 'bill-payment', createdBy: 'Ayesha Rahman' },
+  ],
+  invoices: [
+    { id: 'inv_184', number: 'INV-000184', partyId: 'party_cust1', issueDate: '2026-10-01', dueDate: '2026-10-15', items: [{ id: 'li_i184_1', description: 'Bulk supply order', quantity: '1', unitPrice: '310000.00', categoryId: 'cat_sales' }], subtotal: '310000.00', discountRate: '0', taxRate: '0', discountAmount: '0.00', taxAmount: '0.00', total: '310000.00', paid: '124750.00', balance: '185250.00', status: 'Partially Paid', notes: 'Thank you for your business.', terms: 'Payment due within 14 days.', payments: [payment('ip_184a', '2026-10-08', '124750.00', 'acc_bank', 'cat_sales', 'RCPT-1038', 'txn_005')] },
+    { id: 'inv_185', number: 'INV-000185', partyId: 'party_cust2', issueDate: '2026-10-03', dueDate: '2026-10-18', items: [{ id: 'li_i185_1', description: 'Operations supply package', quantity: '3', unitPrice: '45000.00', categoryId: 'cat_sales' }], subtotal: '135000.00', discountRate: '0', taxRate: '0', discountAmount: '0.00', taxAmount: '0.00', total: '135000.00', paid: '0.00', balance: '135000.00', status: 'Sent', payments: [] },
+    { id: 'inv_186', number: 'INV-000186', partyId: 'party_cust3', issueDate: '2026-09-22', dueDate: '2026-10-02', items: [{ id: 'li_i186_1', description: 'Retail display order', quantity: '1', unitPrice: '98000.00', categoryId: 'cat_sales' }], subtotal: '98000.00', discountRate: '0', taxRate: '0', discountAmount: '0.00', taxAmount: '0.00', total: '98000.00', paid: '98000.00', balance: '0.00', status: 'Paid', payments: [payment('ip_186a', '2026-09-25', '98000.00', 'acc_bank', 'cat_sales', 'RCPT-1022', 'txn_009')] },
+    { id: 'inv_187', number: 'INV-000187', partyId: 'party_cust1', issueDate: '2026-10-11', dueDate: '2026-10-25', items: [{ id: 'li_i187_1', description: 'Monthly goods supply', quantity: '2', unitPrice: '87500.00', categoryId: 'cat_sales' }], subtotal: '175000.00', discountRate: '0', taxRate: '0', discountAmount: '0.00', taxAmount: '0.00', total: '175000.00', paid: '0.00', balance: '175000.00', status: 'Draft', payments: [] },
+  ],
+  bills: [
+    { id: 'bill_307', number: 'BILL-000307', partyId: 'party_vend1', billDate: '2026-10-02', dueDate: '2026-10-14', items: [{ id: 'li_b307_1', description: 'Packaging materials', quantity: '1', unitPrice: '124900.00', categoryId: 'cat_goods' }], subtotal: '124900.00', discountRate: '0', taxRate: '0', discountAmount: '0.00', taxAmount: '0.00', total: '124900.00', paid: '62450.00', balance: '62450.00', status: 'Partially Paid', payments: [payment('bp_307a', '2026-10-09', '62450.00', 'acc_wallet', 'cat_goods', 'PAY-307', 'txn_004')] },
+    { id: 'bill_308', number: 'BILL-000308', partyId: 'party_vend2', billDate: '2026-10-05', dueDate: '2026-10-20', items: [{ id: 'li_b308_1', description: 'Stationery and printer supplies', quantity: '1', unitPrice: '18750.00', categoryId: 'cat_ops' }], subtotal: '18750.00', discountRate: '0', taxRate: '0', discountAmount: '0.00', taxAmount: '0.00', total: '18750.00', paid: '0.00', balance: '18750.00', status: 'Received', payments: [] },
+    { id: 'bill_309', number: 'BILL-000309', partyId: 'party_vend1', billDate: '2026-09-25', dueDate: '2026-10-05', items: [{ id: 'li_b309_1', description: 'Shipping materials', quantity: '1', unitPrice: '28900.00', categoryId: 'cat_goods' }], subtotal: '28900.00', discountRate: '0', taxRate: '0', discountAmount: '0.00', taxAmount: '0.00', total: '28900.00', paid: '28900.00', balance: '0.00', status: 'Paid', payments: [payment('bp_309a', '2026-09-29', '28900.00', 'acc_bank', 'cat_goods', 'PAY-294', 'txn_010')] },
+  ],
+  recurring: [
+    { id: 'rec_001', type: 'Expense', amount: '85000.00', description: 'Monthly office rent', accountId: 'acc_bank', categoryId: 'cat_rent', frequency: 'Monthly', startDate: '2026-01-01', endDate: '2027-01-01', nextRunDate: '2026-11-01', isActive: true, executionCount: 9, lastExecutedAt: '2026-10-01T08:00:00.000Z' },
+    { id: 'rec_002', type: 'Expense', amount: '14500.00', description: 'Internet and utilities', accountId: 'acc_bank', categoryId: 'cat_utilities', frequency: 'Monthly', startDate: '2026-03-01', nextRunDate: '2026-11-05', isActive: true, executionCount: 7, lastExecutedAt: '2026-10-05T08:00:00.000Z' },
+    { id: 'rec_003', type: 'Income', amount: '48000.00', description: 'Monthly service retainer', accountId: 'acc_cash', categoryId: 'cat_services', frequency: 'Monthly', startDate: '2026-01-10', nextRunDate: '2026-11-10', isActive: false, executionCount: 8, lastExecutedAt: '2026-10-10T08:00:00.000Z' },
+  ],
+  documents: [
+    { id: 'doc_001', name: 'Pak-Packaging-October.pdf', originalName: 'Pak-Packaging-October.pdf', mimeType: 'application/pdf', size: 482000, uploadedAt: '2026-10-12T07:45:00.000Z', type: 'Bill', processingStatus: 'Processed', classification: 'Bill', confidence: 0.96, conversionStatus: 'Not converted', extracted: { documentNumber: 'BILL-000310', date: '2026-10-10', dueDate: '2026-10-25', vendor: 'Pak Packaging', subtotal: '56250.00', tax: '0.00', total: '56250.00', currency: 'PKR', paid: '0.00', due: '56250.00' }, rawText: 'PAK PACKAGING CO.\nBill Number: BILL-000310\nDate: 10/10/2026\nDue Date: 25/10/2026\nPackaging materials 56,250.00\nTOTAL PKR 56,250.00' },
+    { id: 'doc_002', name: 'Receipt-Office-Internet.jpg', originalName: 'Receipt-Office-Internet.jpg', mimeType: 'image/jpeg', size: 93000, uploadedAt: '2026-10-11T10:12:00.000Z', type: 'Receipt', processingStatus: 'Uploaded', classification: 'Unknown', confidence: 0, conversionStatus: 'Not converted', extracted: {}, rawText: '' },
+    { id: 'doc_003', name: 'Invoice-Metro-Supplies.png', originalName: 'Invoice-Metro-Supplies.png', mimeType: 'image/png', size: 216000, uploadedAt: '2026-10-10T12:22:00.000Z', type: 'Invoice', processingStatus: 'Failed', classification: 'Unknown', confidence: 0, conversionStatus: 'Not converted', extracted: {}, rawText: '' },
+  ],
+  inventory: [
+    { id: 'item_001', sku: 'PKG-001', name: 'Packaging Box — Medium', unit: 'pcs', quantity: 325, reorderLevel: 100, unitCost: '82.50', currency: 'PKR', status: 'Active', movements: [{ id: 'mov_001', date: '2026-10-09', type: 'Purchase', quantityDelta: 100, previousQuantity: 225, newQuantity: 325, unitCost: '82.50', reference: 'PO-1012' }] },
+    { id: 'item_002', sku: 'OFF-014', name: 'A4 Paper Ream', unit: 'reams', quantity: 42, reorderLevel: 20, unitCost: '1150.00', currency: 'PKR', status: 'Active', movements: [] },
+    { id: 'item_003', sku: 'PKG-008', name: 'Packing Tape', unit: 'rolls', quantity: 16, reorderLevel: 25, unitCost: '230.00', currency: 'PKR', status: 'Active', movements: [] },
+    { id: 'item_004', sku: 'OFF-021', name: 'Printer Toner', unit: 'units', quantity: 0, reorderLevel: 2, unitCost: '7800.00', currency: 'PKR', status: 'Active', movements: [] },
+  ],
+  notifications: [
+    { id: 'ntf_001', title: 'Invoice payment recorded', message: 'PKR 185,000.00 was recorded against Al-Farah Foods.', type: 'Success', createdAt: '2026-10-12T08:12:00.000Z', href: '/invoices/inv_184' },
+    { id: 'ntf_002', title: 'Bill due soon', message: 'BILL-000307 has PKR 62,450.00 remaining and is due on 14 Oct.', type: 'Warning', createdAt: '2026-10-12T06:45:00.000Z', href: '/bills/bill_307' },
+    { id: 'ntf_003', title: 'Low stock: Printer Toner', message: 'Printer Toner is below its reorder level.', type: 'Action required', createdAt: '2026-10-11T09:00:00.000Z', href: '/inventory' },
+    { id: 'ntf_004', title: 'Document processed', message: 'Pak-Packaging-October.pdf is ready for review.', type: 'Information', createdAt: '2026-10-11T08:00:00.000Z', readAt: '2026-10-11T09:00:00.000Z', href: '/documents/doc_001' },
+  ],
+  team: [
+    { id: 'user_001', name: 'Ayesha Rahman', email: 'ayesha@northstar.example', role: 'Owner', status: 'Active', lastLoginAt: '2026-10-12T09:10:00.000Z', createdAt: '2025-11-01' },
+    { id: 'user_002', name: 'Hamza Siddiqui', email: 'hamza@northstar.example', role: 'Admin', status: 'Active', lastLoginAt: '2026-10-11T14:15:00.000Z', createdAt: '2026-01-12' },
+    { id: 'user_003', name: 'Mariam Khan', email: 'mariam@northstar.example', role: 'Employee', status: 'Active', lastLoginAt: '2026-10-10T16:40:00.000Z', createdAt: '2026-03-05' },
+  ],
+  auditLogs: [
+    { id: 'audit_001', createdAt: '2026-10-12T08:12:10.000Z', user: 'Ayesha Rahman', action: 'invoice.payment.recorded', method: 'POST', path: '/api/v1/invoices/inv_184/payments', statusCode: 201, resourceType: 'InvoicePayment', resourceId: 'ip_184a', ip: '192.0.2.10', metadata: 'Payment recorded for INV-000184' },
+    { id: 'audit_002', createdAt: '2026-10-12T07:52:03.000Z', user: 'Hamza Siddiqui', action: 'document.ocr.processed', method: 'POST', path: '/api/v1/documents/doc_001/process', statusCode: 200, resourceType: 'Document', resourceId: 'doc_001', ip: '192.0.2.11', metadata: 'OCR extraction completed' },
+    { id: 'audit_003', createdAt: '2026-10-11T15:24:35.000Z', user: 'Ayesha Rahman', action: 'transaction.created', method: 'POST', path: '/api/v1/transactions', statusCode: 201, resourceType: 'Transaction', resourceId: 'txn_002', ip: '192.0.2.10', metadata: 'Expense transaction created' },
+    { id: 'audit_004', createdAt: '2026-10-11T09:02:00.000Z', user: 'Mariam Khan', action: 'inventory.adjusted', method: 'POST', path: '/api/v1/inventory/items/item_001/adjust', statusCode: 403, resourceType: 'InventoryItem', resourceId: 'item_001', ip: '192.0.2.12', metadata: 'Role restricted action attempt' },
+  ],
+  currencyRates: [
+    { id: 'rate_001', baseCurrency: 'PKR', quoteCurrency: 'USD', rate: '0.00357', effectiveAt: '2026-10-12T06:00:00.000Z', source: 'Manual entry' },
+    { id: 'rate_002', baseCurrency: 'PKR', quoteCurrency: 'AED', rate: '0.01311', effectiveAt: '2026-10-10T06:00:00.000Z', source: 'Manual entry' },
+    { id: 'rate_003', baseCurrency: 'USD', quoteCurrency: 'PKR', rate: '280.11', effectiveAt: '2026-10-12T06:00:00.000Z', source: 'Manual entry' },
+  ],
+  settings: { name: 'Northstar Traders', country: 'Pakistan', currency: 'PKR', timezone: 'Asia/Karachi' },
+  subscription: { plan: 'Starter', status: 'Active', periodStart: '2026-10-01', periodEnd: '2026-10-31', usersLimit: 5, documentsLimit: 250, usersUsed: 3, documentsUsed: 155 },
+  emailVerified: true,
+  mfaEnabled: false,
+};
+
+export function cloneSeed() { return JSON.parse(JSON.stringify(seedData)) as AppData; }
