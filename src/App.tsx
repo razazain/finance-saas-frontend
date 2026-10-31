@@ -14,6 +14,7 @@ import RecurringPage from '@/features/recurring/RecurringPage';
 import { DocumentDetailPage, DocumentsPage } from '@/features/documents/DocumentsPages';
 import ReportsPage from '@/features/reports/ReportsPage';
 import InsightsPage from '@/features/insights/InsightsPage';
+import AIAssistantPage from '@/features/insights/AIAssistantPage';
 import InventoryPage from '@/features/inventory/InventoryPage';
 import NotificationsPage from '@/features/notifications/NotificationsPage';
 import TeamPage from '@/features/team/TeamPage';
@@ -68,6 +69,7 @@ export default function App() {
      <Route path="/documents/:id" element={<DocumentDetailPage/>}/>
      <Route path="/reports" element={<ReportsPage/>}/>
      <Route path="/insights" element={<InsightsPage/>}/>
+     <Route path="/ai-assistant" element={<AIAssistantPage/>}/>
      <Route path="/inventory" element={<InventoryPage/>}/>
      <Route path="/notifications" element={<NotificationsPage/>}/>
      <Route path="/team" element={<RoleGuard allow={['Owner','Admin']}><TeamPage/></RoleGuard>}/>
