@@ -1,63 +1,998 @@
-import type { FormEvent } from 'react';
-import { useEffect, useMemo, useState } from 'react';
-import { financeApi, authApi } from '@/lib/api/services';
-import { getApiErrorMessage } from '@/lib/api/client';
-import { Link } from 'react-router-dom';
-import { createColumnHelper } from '@tanstack/react-table';
-import { CheckCircle2, Copy, Globe, KeyRound, LockKeyhole, Mail, Plus, Save, ShieldCheck, Smartphone, ArrowLeftRight, Wallet } from 'lucide-react';
-import Decimal from 'decimal.js';
-import { useApp } from '@/context/AppContext';
-import { formatDateTime, money } from '@/lib/utils';
-import type { CurrencyRate } from '@/types';
-import { Badge, Button, Card, DataTable, Dialog, Field, Input, Notice, PageHeader, Select, StatCard, Textarea } from '@/components/ui';
+import type { FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { financeApi, authApi } from "@/lib/api/services";
+import { getApiErrorMessage } from "@/lib/api/client";
+import { Link } from "react-router-dom";
+import { createColumnHelper } from "@tanstack/react-table";
+import {
+  CheckCircle2,
+  Copy,
+  Globe,
+  KeyRound,
+  LockKeyhole,
+  Mail,
+  Plus,
+  Save,
+  ShieldCheck,
+  Smartphone,
+  ArrowLeftRight,
+  Wallet,
+} from "lucide-react";
+import Decimal from "decimal.js";
+import { useApp } from "@/context/AppContext";
+import { formatDateTime, money } from "@/lib/utils";
+import type { CurrencyRate } from "@/types";
+import {
+  Badge,
+  Button,
+  Card,
+  DataTable,
+  Dialog,
+  Field,
+  Input,
+  Notice,
+  PageHeader,
+  Select,
+  StatCard,
+  Textarea,
+} from "@/components/ui";
 
-export function BusinessSettingsPage(){
-  const {data,role,updateSettings,toast}=useApp();
-  const [form,setForm]=useState({...data.settings});
-  const [error,setError]=useState('');
-  const [dirty,setDirty]=useState(false);
-  const canEdit=role==='Owner';
-  const supportedCurrencies=['USD','EUR','GBP','PKR','AED','SAR','INR','CAD','AUD','JPY','CNY','QAR','KWD','BHD','OMR'];
-  const save=(e:FormEvent)=>{
+export function BusinessSettingsPage() {
+  const { data, role, updateSettings, toast } = useApp();
+  const [form, setForm] = useState({ ...data.settings });
+  const [error, setError] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const canEdit = role === "Owner";
+  const supportedCurrencies = [
+    "USD",
+    "EUR",
+    "GBP",
+    "PKR",
+    "AED",
+    "SAR",
+    "INR",
+    "CAD",
+    "AUD",
+    "JPY",
+    "CNY",
+    "QAR",
+    "KWD",
+    "BHD",
+    "OMR",
+  ];
+  const save = (e: FormEvent) => {
     e.preventDefault();
-    if(!form.name.trim()){setError('Business name is required.');return;}
-    if(!form.country){setError('Choose a country.');return;}
-    if(!form.currency){setError('Choose a currency.');return;}
-    if(!form.timezone){setError('Choose a timezone.');return;}
-    if(form.currency!==data.settings.currency&&data.accounts.some(account=>account.status==='Active'&&account.currency!==form.currency)){
-      setError('Currency cannot be changed while active accounts use a different currency. Align account currencies first.');return;
+    if (!form.name.trim()) {
+      setError("Business name is required.");
+      return;
     }
-    updateSettings({name:form.name.trim(),country:form.country,currency:form.currency,timezone:form.timezone});
-    setError('');setDirty(false);
-    toast({title:'Business settings saved',description:'Settings were updated in your workspace workspace.',tone:'success'});
+    if (!form.country) {
+      setError("Choose a country.");
+      return;
+    }
+    if (!form.currency) {
+      setError("Choose a currency.");
+      return;
+    }
+    if (!form.timezone) {
+      setError("Choose a timezone.");
+      return;
+    }
+    if (
+      form.currency !== data.settings.currency &&
+      data.accounts.some(
+        (account) =>
+          account.status === "Active" && account.currency !== form.currency,
+      )
+    ) {
+      setError(
+        "Currency cannot be changed while active accounts use a different currency. Align account currencies first.",
+      );
+      return;
+    }
+    updateSettings({
+      name: form.name.trim(),
+      country: form.country,
+      currency: form.currency,
+      timezone: form.timezone,
+    });
+    setError("");
+    setDirty(false);
+    toast({
+      title: "Business settings saved",
+      description: "Settings were updated in your workspace workspace.",
+      tone: "success",
+    });
   };
-  return <div className="page-stack">
-    <PageHeader title="Business settings" description="Configure the business identity and financial context used throughout the workspace."/>
-    <div className="settings-layout">
-      <div className="settings-nav"><div className="settings-nav-group"><span>Workspace</span><a className="active"><Globe size={16}/> Business profile</a><Link to="/settings/currency-rates"><Wallet size={16}/> Currency rates</Link><Link to="/settings/currency-converter"><ArrowLeftRight size={16}/> Currency converter</Link></div><div className="settings-nav-group"><span>Access</span><Link to="/settings/security"><ShieldCheck size={16}/> Security</Link></div></div>
-      <Card className="settings-content">
-        <div className="settings-content-header"><div><h2>Business profile</h2><p>These are the settings supported by the business profile API.</p></div><Badge tone={canEdit?'primary':'neutral'}>{canEdit?'Owner access':'Read only'}</Badge></div>
-        <form className="form-stack" onSubmit={save}>
-          <div className="business-avatar"><span>{form.name.split(' ').map(v=>v[0]).slice(0,2).join('').toUpperCase()||'NT'}</span><div><strong>{form.name}</strong><small>Business workspace</small></div></div>
-          <div className="form-grid two">
-            <Field label="Business name" required error={error}><Input disabled={!canEdit} value={form.name} onChange={e=>{setForm({...form,name:e.target.value});setDirty(true);setError('');}}/></Field>
-            <Field label="Country" required><Input disabled={!canEdit} value={form.country} onChange={e=>{setForm({...form,country:e.target.value});setDirty(true);}} placeholder="Country"/></Field>
-            <Field label="Business currency" required hint="The backend supports configured ISO currency codes."><Select disabled={!canEdit} value={form.currency} onChange={e=>{setForm({...form,currency:e.target.value});setDirty(true);setError('');}}>{supportedCurrencies.map(v=><option key={v}>{v}</option>)}</Select></Field>
-            <Field label="Timezone" required><Select disabled={!canEdit} value={form.timezone} onChange={e=>{setForm({...form,timezone:e.target.value});setDirty(true);}}>{['Asia/Karachi','Asia/Dubai','Asia/Riyadh','Asia/Kolkata','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','Australia/Sydney','UTC'].map(v=><option key={v}>{v}</option>)}</Select></Field>
+  return (
+    <div className="page-stack">
+      <PageHeader
+        title="Business settings"
+        description="Configure the business identity and financial context used throughout the workspace."
+      />
+      <div className="settings-layout">
+        <div className="settings-nav">
+          <div className="settings-nav-group">
+            <span>Workspace</span>
+            <a className="active">
+              <Globe size={16} /> Business profile
+            </a>
+            <Link to="/settings/currency-rates">
+              <Wallet size={16} /> Currency rates
+            </Link>
+            <Link to="/settings/currency-converter">
+              <ArrowLeftRight size={16} /> Currency converter
+            </Link>
           </div>
-          {form.currency!==data.settings.currency&&<Notice tone="warning" title="Currency change restriction">The backend blocks a currency change while any active account uses a different currency. Align active account currencies first. This change will not convert historical balances.</Notice>}
-          {error&&<Notice tone="danger" title="Settings could not be saved">{error}</Notice>}
-          {canEdit&&<div className="form-actions"><Button type="button" variant="secondary" onClick={()=>{setForm({...data.settings});setDirty(false);setError('');}}>Discard</Button><Button type="submit" disabled={!dirty} icon={<Save size={16}/>}>Save changes</Button></div>}
-          {!canEdit&&<Notice tone="info">Business settings can only be changed by the Owner.</Notice>}
-        </form>
-      </Card>
+          <div className="settings-nav-group">
+            <span>Access</span>
+            <Link to="/settings/security">
+              <ShieldCheck size={16} /> Security
+            </Link>
+          </div>
+        </div>
+        <Card className="settings-content">
+          <div className="settings-content-header">
+            <div>
+              <h2>Business profile</h2>
+              <p>
+                These are the settings supported by the business profile API.
+              </p>
+            </div>
+            <Badge tone={canEdit ? "primary" : "neutral"}>
+              {canEdit ? "Owner access" : "Read only"}
+            </Badge>
+          </div>
+          <form className="form-stack" onSubmit={save}>
+            <div className="business-avatar">
+              <span>
+                {form.name
+                  .split(" ")
+                  .map((v) => v[0])
+                  .slice(0, 2)
+                  .join("")
+                  .toUpperCase() || "NT"}
+              </span>
+              <div>
+                <strong>{form.name}</strong>
+                <small>Business workspace</small>
+              </div>
+            </div>
+            <div className="form-grid two">
+              <Field label="Business name" required error={error}>
+                <Input
+                  disabled={!canEdit}
+                  value={form.name}
+                  onChange={(e) => {
+                    setForm({ ...form, name: e.target.value });
+                    setDirty(true);
+                    setError("");
+                  }}
+                />
+              </Field>
+              <Field label="Country" required>
+                <Input
+                  disabled={!canEdit}
+                  value={form.country}
+                  onChange={(e) => {
+                    setForm({ ...form, country: e.target.value });
+                    setDirty(true);
+                  }}
+                  placeholder="Country"
+                />
+              </Field>
+              <Field
+                label="Business currency"
+                required
+                hint="The backend supports configured ISO currency codes."
+              >
+                <Select
+                  disabled={!canEdit}
+                  value={form.currency}
+                  onChange={(e) => {
+                    setForm({ ...form, currency: e.target.value });
+                    setDirty(true);
+                    setError("");
+                  }}
+                >
+                  {supportedCurrencies.map((v) => (
+                    <option key={v}>{v}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Timezone" required>
+                <Select
+                  disabled={!canEdit}
+                  value={form.timezone}
+                  onChange={(e) => {
+                    setForm({ ...form, timezone: e.target.value });
+                    setDirty(true);
+                  }}
+                >
+                  {[
+                    "Asia/Karachi",
+                    "Asia/Dubai",
+                    "Asia/Riyadh",
+                    "Asia/Kolkata",
+                    "Asia/Singapore",
+                    "Europe/London",
+                    "Europe/Paris",
+                    "America/New_York",
+                    "America/Los_Angeles",
+                    "Australia/Sydney",
+                    "UTC",
+                  ].map((v) => (
+                    <option key={v}>{v}</option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            {form.currency !== data.settings.currency && (
+              <Notice tone="warning" title="Currency change restriction">
+                The backend blocks a currency change while any active account
+                uses a different currency. Align active account currencies
+                first. This change will not convert historical balances.
+              </Notice>
+            )}
+            {error && (
+              <Notice tone="danger" title="Settings could not be saved">
+                {error}
+              </Notice>
+            )}
+            {canEdit && (
+              <div className="form-actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setForm({ ...data.settings });
+                    setDirty(false);
+                    setError("");
+                  }}
+                >
+                  Discard
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={!dirty}
+                  icon={<Save size={16} />}
+                >
+                  Save changes
+                </Button>
+              </div>
+            )}
+            {!canEdit && (
+              <Notice tone="info">
+                Business settings can only be changed by the Owner.
+              </Notice>
+            )}
+          </form>
+        </Card>
+      </div>
     </div>
-  </div>;
+  );
 }
-const rateHelper=createColumnHelper<CurrencyRate>();
-export function CurrencyRatesPage(){const{data,role,addCurrencyRate,toast}=useApp();const[open,setOpen]=useState(false);const[form,setForm]=useState({baseCurrency:data.settings.currency,quoteCurrency:'USD',rate:'',effectiveAt:new Date().toISOString().slice(0,16),source:'Manual entry'});const[error,setError]=useState('');const canManage=role==='Owner';const columns=[rateHelper.accessor('baseCurrency',{header:'Base currency',cell:i=><strong>{i.getValue()}</strong>}),rateHelper.accessor('quoteCurrency',{header:'Quote currency',cell:i=><strong>{i.getValue()}</strong>}),rateHelper.accessor('rate',{header:'Rate',cell:i=><strong className="mono-cell">{i.getValue()}</strong>}),rateHelper.accessor('effectiveAt',{header:'Effective at',cell:i=>formatDateTime(i.getValue())}),rateHelper.accessor('source',{header:'Source',cell:i=><Badge tone="neutral">{i.getValue()}</Badge>})];const save=(e:FormEvent)=>{e.preventDefault();if(form.baseCurrency===form.quoteCurrency){setError('Base and quote currencies must be different.');return;}if(!form.rate||Number(form.rate)<=0){setError('Enter an exchange rate greater than zero.');return;}addCurrencyRate({baseCurrency:form.baseCurrency,quoteCurrency:form.quoteCurrency,rate:new Decimal(form.rate).toSignificantDigits(10).toString(),effectiveAt:new Date(form.effectiveAt).toISOString(),source:form.source.trim()||'Manual entry'});setOpen(false);toast({title:'Currency rate added',description:'This configured rate can be used in the currency converter.',tone:'success'});};return <div className="page-stack"><PageHeader title="Currency rates" description="Manage configured exchange rates for reporting and conversion." actions={canManage?<Button icon={<Plus size={16}/>} onClick={()=>{setError('');setOpen(true);}}>Add rate</Button>:undefined}/><Notice tone="info" title="Manual rates only">Rates are configured by the business. The application does not fetch or imply live market rates.</Notice><Card className="list-card"><div className="list-toolbar"><div><h2>Configured rates</h2><p>Rate expresses how many quote-currency units equal one base-currency unit.</p></div><Link to="/settings/currency-converter" className="link-button">Open converter →</Link></div><DataTable columns={columns} data={data.currencyRates} rowId={r=>r.id} emptyTitle="No currency rates" emptyDescription="Add a rate to enable conversions between currencies."/></Card>{!canManage&&<Notice tone="warning">Only the workspace Owner can add currency rates.</Notice>}<Dialog open={open} onOpenChange={setOpen} title="Add currency rate" description="Record a known rate for a specific effective date." size="md" footer={<><Button variant="secondary" onClick={()=>setOpen(false)}>Cancel</Button><Button onClick={()=>document.getElementById('rate-submit')?.click()}>Save rate</Button></>}><form className="form-stack" onSubmit={save}><div className="form-grid two"><Field label="Base currency" required><Select value={form.baseCurrency} onChange={e=>setForm({...form,baseCurrency:e.target.value})}>{['PKR','USD','AED','GBP','SAR','EUR','INR','CAD','AUD'].map(v=><option key={v}>{v}</option>)}</Select></Field><Field label="Quote currency" required><Select value={form.quoteCurrency} onChange={e=>setForm({...form,quoteCurrency:e.target.value})}>{['PKR','USD','AED','GBP','SAR','EUR','INR','CAD','AUD'].map(v=><option key={v}>{v}</option>)}</Select></Field></div><Field label="Rate" required error={error}><Input inputMode="decimal" value={form.rate} onChange={e=>{setForm({...form,rate:e.target.value});setError('');}} placeholder="e.g. 280.1100"/></Field><Field label="Effective date and time" required><Input type="datetime-local" value={form.effectiveAt} onChange={e=>setForm({...form,effectiveAt:e.target.value})}/></Field><Field label="Source"><Input value={form.source} onChange={e=>setForm({...form,source:e.target.value})} placeholder="Manual entry"/></Field><button id="rate-submit" className="visually-hidden" type="submit">Submit rate</button></form></Dialog></div>}
+const rateHelper = createColumnHelper<CurrencyRate>();
+export function CurrencyRatesPage() {
+  const { data, role, addCurrencyRate, toast } = useApp();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    baseCurrency: data.settings.currency,
+    quoteCurrency: "USD",
+    rate: "",
+    effectiveAt: new Date().toISOString().slice(0, 16),
+    source: "Manual entry",
+  });
+  const [error, setError] = useState("");
+  const canManage = role === "Owner";
+  const columns = [
+    rateHelper.accessor("baseCurrency", {
+      header: "Base currency",
+      cell: (i) => <strong>{i.getValue()}</strong>,
+    }),
+    rateHelper.accessor("quoteCurrency", {
+      header: "Quote currency",
+      cell: (i) => <strong>{i.getValue()}</strong>,
+    }),
+    rateHelper.accessor("rate", {
+      header: "Rate",
+      cell: (i) => <strong className="mono-cell">{i.getValue()}</strong>,
+    }),
+    rateHelper.accessor("effectiveAt", {
+      header: "Effective at",
+      cell: (i) => formatDateTime(i.getValue()),
+    }),
+    rateHelper.accessor("source", {
+      header: "Source",
+      cell: (i) => <Badge tone="neutral">{i.getValue()}</Badge>,
+    }),
+  ];
+  const save = (e: FormEvent) => {
+    e.preventDefault();
+    if (form.baseCurrency === form.quoteCurrency) {
+      setError("Base and quote currencies must be different.");
+      return;
+    }
+    if (!form.rate || Number(form.rate) <= 0) {
+      setError("Enter an exchange rate greater than zero.");
+      return;
+    }
+    addCurrencyRate({
+      baseCurrency: form.baseCurrency,
+      quoteCurrency: form.quoteCurrency,
+      rate: new Decimal(form.rate).toSignificantDigits(10).toString(),
+      effectiveAt: new Date(form.effectiveAt).toISOString(),
+      source: form.source.trim() || "Manual entry",
+    });
+    setOpen(false);
+    toast({
+      title: "Currency rate added",
+      description:
+        "This configured rate can be used in the currency converter.",
+      tone: "success",
+    });
+  };
+  return (
+    <div className="page-stack">
+      <PageHeader
+        title="Currency rates"
+        description="Manage configured exchange rates for reporting and conversion."
+        actions={
+          canManage ? (
+            <Button
+              icon={<Plus size={16} />}
+              onClick={() => {
+                setError("");
+                setOpen(true);
+              }}
+            >
+              Add rate
+            </Button>
+          ) : undefined
+        }
+      />
+      <Notice tone="info" title="Manual rates only">
+        Rates are configured by the business. The application does not fetch or
+        imply live market rates.
+      </Notice>
+      <Card className="list-card">
+        <div className="list-toolbar">
+          <div>
+            <h2>Configured rates</h2>
+            <p>
+              Rate expresses how many quote-currency units equal one
+              base-currency unit.
+            </p>
+          </div>
+          <Link to="/settings/currency-converter" className="link-button">
+            Open converter →
+          </Link>
+        </div>
+        <DataTable
+          columns={columns}
+          data={data.currencyRates}
+          rowId={(r) => r.id}
+          emptyTitle="No currency rates"
+          emptyDescription="Add a rate to enable conversions between currencies."
+        />
+      </Card>
+      {!canManage && (
+        <Notice tone="warning">
+          Only the workspace Owner can add currency rates.
+        </Notice>
+      )}
+      <Dialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Add currency rate"
+        description="Record a known rate for a specific effective date."
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => document.getElementById("rate-submit")?.click()}
+            >
+              Save rate
+            </Button>
+          </>
+        }
+      >
+        <form className="form-stack" onSubmit={save}>
+          <div className="form-grid two">
+            <Field label="Base currency" required>
+              <Select
+                value={form.baseCurrency}
+                onChange={(e) =>
+                  setForm({ ...form, baseCurrency: e.target.value })
+                }
+              >
+                {[
+                  "PKR",
+                  "USD",
+                  "AED",
+                  "GBP",
+                  "SAR",
+                  "EUR",
+                  "INR",
+                  "CAD",
+                  "AUD",
+                ].map((v) => (
+                  <option key={v}>{v}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Quote currency" required>
+              <Select
+                value={form.quoteCurrency}
+                onChange={(e) =>
+                  setForm({ ...form, quoteCurrency: e.target.value })
+                }
+              >
+                {[
+                  "PKR",
+                  "USD",
+                  "AED",
+                  "GBP",
+                  "SAR",
+                  "EUR",
+                  "INR",
+                  "CAD",
+                  "AUD",
+                ].map((v) => (
+                  <option key={v}>{v}</option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+          <Field label="Rate" required error={error}>
+            <Input
+              inputMode="decimal"
+              value={form.rate}
+              onChange={(e) => {
+                setForm({ ...form, rate: e.target.value });
+                setError("");
+              }}
+              placeholder="e.g. 280.1100"
+            />
+          </Field>
+          <Field label="Effective date and time" required>
+            <Input
+              type="datetime-local"
+              value={form.effectiveAt}
+              onChange={(e) =>
+                setForm({ ...form, effectiveAt: e.target.value })
+              }
+            />
+          </Field>
+          <Field label="Source">
+            <Input
+              value={form.source}
+              onChange={(e) => setForm({ ...form, source: e.target.value })}
+              placeholder="Manual entry"
+            />
+          </Field>
+          <button id="rate-submit" className="visually-hidden" type="submit">
+            Submit rate
+          </button>
+        </form>
+      </Dialog>
+    </div>
+  );
+}
 
-export function CurrencyConverterPage(){const{data}=useApp();const currencies=Array.from(new Set([data.settings.currency,...data.currencyRates.flatMap(r=>[r.baseCurrency,r.quoteCurrency])]));const[base,setBase]=useState(data.settings.currency);const[quote,setQuote]=useState('USD');const[amount,setAmount]=useState('10000');const[date,setDate]=useState(new Date().toISOString().slice(0,10));const[result,setResult]=useState<any>(null);const[error,setError]=useState('');const[busy,setBusy]=useState(false);useEffect(()=>{if(!base||!quote||base===quote||!amount||Number(amount)<0){setResult(null);setError('');return;}let active=true;setBusy(true);financeApi.convertCurrency({from:base,to:quote,amount:String(amount),at:new Date(`${date}T23:59:59.000Z`).toISOString()}).then(r=>{if(active){setResult(r);setError('')}}).catch(e=>{if(active){setResult(null);setError(getApiErrorMessage(e))}}).finally(()=>{if(active)setBusy(false)});return()=>{active=false}},[base,quote,amount,date]);return <div className="page-stack"><PageHeader title="Currency converter" description="Convert amounts using exchange rates configured in your Munshee backend."/><div className="converter-layout"><Card className="converter-card"><div className="converter-card-title"><div className="converter-icon"><ArrowLeftRight size={19}/></div><div><h2>Convert an amount</h2><p>Conversion is calculated by the backend using stored rates.</p></div></div><form className="form-stack" onSubmit={e=>e.preventDefault()}><Field label="Amount" required><Input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)}/></Field><div className="currency-select-row"><Field label="From"><Select value={base} onChange={e=>setBase(e.target.value)}>{currencies.map(c=><option key={c}>{c}</option>)}</Select></Field><button type="button" className="swap-currency" onClick={()=>{setBase(quote);setQuote(base);}} aria-label="Swap currencies"><ArrowLeftRight size={17}/></button><Field label="To"><Select value={quote} onChange={e=>setQuote(e.target.value)}>{currencies.map(c=><option key={c}>{c}</option>)}</Select></Field></div><Field label="Rate effective on"><Input type="date" value={date} onChange={e=>setDate(e.target.value)}/></Field></form>{base===quote?<Notice tone="warning">Choose two different currencies.</Notice>:busy?<p>Calculating with the backend rate…</p>:result?<div className="conversion-result"><span>Converted amount</span><strong>{money(String(result.convertedAmount??result.amount??'0'),quote,4)}</strong><div className="conversion-rate">1 {base} = {Number(result.rate??0).toPrecision(8)} {quote}</div><small>Rate and converted amount returned by the backend.</small></div>:<div className="conversion-empty"><Wallet size={24}/><strong>{error?'No conversion available':'No configured rate found'}</strong><p>{error||'Add an exchange rate on the Currency rates page, then try again.'}</p></div>}</Card><Card className="converter-help"><h2>About configured rates</h2><p>Rates are entered by an authorized user and applied for the selected effective date.</p><div className="help-row"><span><CheckCircle2 size={16}/></span><div><strong>Backend calculation</strong><small>The backend validates the rate and calculates the converted amount.</small></div></div><div className="help-row"><span><CheckCircle2 size={16}/></span><div><strong>Historical context</strong><small>Choose a date to locate a rate effective on or before that day.</small></div></div><div className="help-row"><span><CheckCircle2 size={16}/></span><div><strong>No automatic revaluation</strong><small>This conversion does not rewrite existing account balances.</small></div></div><Link to="/settings/currency-rates" className="link-button">Manage currency rates →</Link></Card></div></div>}
-export function SecurityPage(){const{data,role,setMfaEnabled,setEmailVerified,toast}=useApp();const[setupOpen,setSetupOpen]=useState(false);const[disableOpen,setDisableOpen]=useState(false);const[code,setCode]=useState('');const[disableCode,setDisableCode]=useState('');const[error,setError]=useState('');const[setupKey,setSetupKey]=useState('');const[setupError,setSetupError]=useState('');const verifySetup=(e:FormEvent)=>{e.preventDefault();if(!/^\d{6}$/.test(code)){setError('Enter a six-digit code.');return;}setMfaEnabled(true,code);setSetupOpen(false);setCode('');setError('');};const disable=(e:FormEvent)=>{e.preventDefault();if(!/^\d{6}$/.test(disableCode)){setError('Enter a six-digit code.');return;}setMfaEnabled(false,disableCode);setDisableOpen(false);setDisableCode('');setError('');};return <div className="page-stack"><PageHeader title="Security" description="Manage verified email access and multi-factor authentication."/><div className="security-top-cards"><Card className="security-status-card"><div className="security-status-icon"><Mail size={20}/></div><div className="security-status-content"><div className="security-title-row"><h2>Email verification</h2><Badge tone={data.emailVerified?'success':'warning'}>{data.emailVerified?'Verified':'Pending'}</Badge></div><p>Confirm the address used for sign-in and workspace notifications.</p><strong>{data.team.find(member=>member.role===role)?.email || 'No email available'}</strong>{data.emailVerified?<div className="security-inline-success"><CheckCircle2 size={15}/> Email address is verified.</div>:<Button variant="secondary" onClick={()=>{setEmailVerified(true);toast({title:'Verification email requested',description:'Check the account inbox for the verification link.',tone:'success'});}}>Resend verification email</Button>}</div></Card><Card className="security-status-card"><div className="security-status-icon"><Smartphone size={20}/></div><div className="security-status-content"><div className="security-title-row"><h2>Authenticator app (MFA)</h2><Badge tone={data.mfaEnabled?'success':'neutral'}>{data.mfaEnabled?'Enabled':'Not enabled'}</Badge></div><p>Add a second sign-in step using a time-based one-time password from an authenticator app.</p>{data.mfaEnabled?<div className="security-inline-success"><CheckCircle2 size={15}/> Multi-factor authentication is enabled in this workspace.</div>:<p className="muted-cell">Recommended for users with access to financial and administrative records.</p>}{data.mfaEnabled?<Button variant="danger" onClick={()=>{setError('');setDisableCode('');setDisableOpen(true);}}>Disable MFA</Button>:<Button onClick={async()=>{setError('');setCode('');setSetupError('');try{const setup=await authApi.setupMfa();setSetupKey(setup.secret||'');setSetupOpen(true);}catch(e){setSetupError(getApiErrorMessage(e));toast({title:'MFA setup failed',description:getApiErrorMessage(e),tone:'error'});}}}>Set up MFA</Button>}</div></Card></div><Card className="settings-content"><div className="settings-content-header"><div><h2>Sign-in security</h2><p>Access and multi-factor authentication are managed by the backend.</p></div></div><div className="security-check-list"><div><span className="security-list-icon"><LockKeyhole size={17}/></span><div><strong>Access token</strong><p>Short-lived token used for authenticated API requests.</p></div><Badge tone="info">Backend managed</Badge></div><div><span className="security-list-icon"><KeyRound size={17}/></span><div><strong>Refresh token</strong><p>Stored in an HttpOnly cookie; not exposed to frontend JavaScript.</p></div><Badge tone="info">Backend managed</Badge></div><div><span className="security-list-icon"><ShieldCheck size={17}/></span><div><strong>Role permissions</strong><p>Action visibility improves the UI, but real authorization must always be enforced by the backend.</p></div><Badge tone="success">Server enforced</Badge></div></div><Notice tone="info">MFA setup and code verification are handled by the backend. Keep the displayed setup secret private.</Notice></Card>
- <Dialog open={setupOpen} onOpenChange={setSetupOpen} title="Set up authenticator app" description="Scan the QR code with your authenticator app, then verify a six-digit code." size="md" footer={<><Button variant="secondary" onClick={()=>setSetupOpen(false)}>Cancel</Button><Button onClick={()=>document.getElementById('mfa-setup-submit')?.click()}>Verify and enable</Button></>}><form className="form-stack" onSubmit={verifySetup}><div className="totp-setup-layout"><div className="fake-qr" aria-label="Decorative placeholder QR code"><div className="qr-corner top-left"/><div className="qr-corner top-right"/><div className="qr-corner bottom-left"/><div className="qr-random"/></div><div><strong>Munshee</strong><p className="muted-cell">Manual setup key</p><code className="totp-key">{setupKey||'Loading secret…'}</code><Button variant="ghost" size="sm" icon={<Copy size={14}/>} onClick={()=>{navigator.clipboard?.writeText(setupKey);toast({title:'Setup key copied',tone:'info'});}}>Copy key</Button></div></div><Notice tone="warning">Add this secret manually in your authenticator app, then enter the current six-digit code to enable MFA.</Notice><Field label="6-digit authenticator code" required error={error}><Input className="otp-input" inputMode="numeric" maxLength={6} value={code} onChange={e=>{setCode(e.target.value.replace(/\D/g,'').slice(0,6));setError('');}} placeholder="000 000"/></Field><button id="mfa-setup-submit" type="submit" className="visually-hidden">Enable MFA</button></form></Dialog>
- <Dialog open={disableOpen} onOpenChange={setDisableOpen} title="Disable MFA?" description="Verify the current authenticator code before disabling the extra sign-in step." size="sm" footer={<><Button variant="secondary" onClick={()=>setDisableOpen(false)}>Cancel</Button><Button variant="danger" onClick={()=>document.getElementById('mfa-disable-submit')?.click()}>Disable MFA</Button></>}><form className="form-stack" onSubmit={disable}><Notice tone="warning">Disabling MFA reduces account protection. The real backend will validate the TOTP code.</Notice><Field label="6-digit authenticator code" required error={error}><Input className="otp-input" inputMode="numeric" maxLength={6} value={disableCode} onChange={e=>{setDisableCode(e.target.value.replace(/\D/g,'').slice(0,6));setError('');}} placeholder="000 000"/></Field><button id="mfa-disable-submit" type="submit" className="visually-hidden">Disable</button></form></Dialog></div>}
+export function CurrencyConverterPage() {
+  const { data } = useApp();
+  const currencies = Array.from(
+    new Set([
+      data.settings.currency,
+      ...data.currencyRates.flatMap((r) => [r.baseCurrency, r.quoteCurrency]),
+    ]),
+  );
+  const [base, setBase] = useState(data.settings.currency);
+  const [quote, setQuote] = useState("USD");
+  const [amount, setAmount] = useState("10000");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [result, setResult] = useState<any>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!base || !quote || base === quote || !amount || Number(amount) < 0) {
+      setResult(null);
+      setError("");
+      return;
+    }
+    let active = true;
+    setBusy(true);
+    financeApi
+      .convertCurrency({
+        from: base,
+        to: quote,
+        amount: String(amount),
+        at: new Date(`${date}T23:59:59.000Z`).toISOString(),
+      })
+      .then((r) => {
+        if (active) {
+          setResult(r);
+          setError("");
+        }
+      })
+      .catch((e) => {
+        if (active) {
+          setResult(null);
+          setError(getApiErrorMessage(e));
+        }
+      })
+      .finally(() => {
+        if (active) setBusy(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [base, quote, amount, date]);
+  return (
+    <div className="page-stack">
+      <PageHeader
+        title="Currency converter"
+        description="Convert amounts using exchange rates configured in your Munshee backend."
+      />
+      <div className="converter-layout">
+        <Card className="converter-card">
+          <div className="converter-card-title">
+            <div className="converter-icon">
+              <ArrowLeftRight size={19} />
+            </div>
+            <div>
+              <h2>Convert an amount</h2>
+              <p>Conversion is calculated by the backend using stored rates.</p>
+            </div>
+          </div>
+          <form className="form-stack" onSubmit={(e) => e.preventDefault()}>
+            <Field label="Amount" required>
+              <Input
+                type="number"
+                min="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </Field>
+            <div className="currency-select-row">
+              <Field label="From">
+                <Select value={base} onChange={(e) => setBase(e.target.value)}>
+                  {currencies.map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </Select>
+              </Field>
+              <button
+                type="button"
+                className="swap-currency"
+                onClick={() => {
+                  setBase(quote);
+                  setQuote(base);
+                }}
+                aria-label="Swap currencies"
+              >
+                <ArrowLeftRight size={17} />
+              </button>
+              <Field label="To">
+                <Select
+                  value={quote}
+                  onChange={(e) => setQuote(e.target.value)}
+                >
+                  {currencies.map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            <Field label="Rate effective on">
+              <Input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </Field>
+          </form>
+          {base === quote ? (
+            <Notice tone="warning">Choose two different currencies.</Notice>
+          ) : busy ? (
+            <p>Calculating with the backend rate…</p>
+          ) : result ? (
+            <div className="conversion-result">
+              <span>Converted amount</span>
+              <strong>
+                {money(
+                  String(result.convertedAmount ?? result.amount ?? "0"),
+                  quote,
+                  4,
+                )}
+              </strong>
+              <div className="conversion-rate">
+                1 {base} = {Number(result.rate ?? 0).toPrecision(8)} {quote}
+              </div>
+              <small>Rate and converted amount returned by the backend.</small>
+            </div>
+          ) : (
+            <div className="conversion-empty">
+              <Wallet size={24} />
+              <strong>
+                {error ? "No conversion available" : "No configured rate found"}
+              </strong>
+              <p>
+                {error ||
+                  "Add an exchange rate on the Currency rates page, then try again."}
+              </p>
+            </div>
+          )}
+        </Card>
+        <Card className="converter-help">
+          <h2>About configured rates</h2>
+          <p>
+            Rates are entered by an authorized user and applied for the selected
+            effective date.
+          </p>
+          <div className="help-row">
+            <span>
+              <CheckCircle2 size={16} />
+            </span>
+            <div>
+              <strong>Backend calculation</strong>
+              <small>
+                The backend validates the rate and calculates the converted
+                amount.
+              </small>
+            </div>
+          </div>
+          <div className="help-row">
+            <span>
+              <CheckCircle2 size={16} />
+            </span>
+            <div>
+              <strong>Historical context</strong>
+              <small>
+                Choose a date to locate a rate effective on or before that day.
+              </small>
+            </div>
+          </div>
+          <div className="help-row">
+            <span>
+              <CheckCircle2 size={16} />
+            </span>
+            <div>
+              <strong>No automatic revaluation</strong>
+              <small>
+                This conversion does not rewrite existing account balances.
+              </small>
+            </div>
+          </div>
+          <Link to="/settings/currency-rates" className="link-button">
+            Manage currency rates →
+          </Link>
+        </Card>
+      </div>
+    </div>
+  );
+}
+export function SecurityPage() {
+  const { data, role, setMfaEnabled, setEmailVerified, toast } = useApp();
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [disableOpen, setDisableOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [disableCode, setDisableCode] = useState("");
+  const [error, setError] = useState("");
+  const [setupKey, setSetupKey] = useState("");
+  const [setupError, setSetupError] = useState("");
+  const verifySetup = (e: FormEvent) => {
+    e.preventDefault();
+    if (!/^\d{6}$/.test(code)) {
+      setError("Enter a six-digit code.");
+      return;
+    }
+    setMfaEnabled(true, code);
+    setSetupOpen(false);
+    setCode("");
+    setError("");
+  };
+  const disable = (e: FormEvent) => {
+    e.preventDefault();
+    if (!/^\d{6}$/.test(disableCode)) {
+      setError("Enter a six-digit code.");
+      return;
+    }
+    setMfaEnabled(false, disableCode);
+    setDisableOpen(false);
+    setDisableCode("");
+    setError("");
+  };
+  return (
+    <div className="page-stack">
+      <PageHeader
+        title="Security"
+        description="Manage verified email access and multi-factor authentication."
+      />
+      <div className="security-top-cards">
+        <Card className="security-status-card">
+          <div className="security-status-icon">
+            <Mail size={20} />
+          </div>
+          <div className="security-status-content">
+            <div className="security-title-row">
+              <h2>Email verification</h2>
+              <Badge tone={data.emailVerified ? "success" : "warning"}>
+                {data.emailVerified ? "Verified" : "Pending"}
+              </Badge>
+            </div>
+            <p>
+              Confirm the address used for sign-in and workspace notifications.
+            </p>
+            <strong>
+              {data.team.find((member) => member.role === role)?.email ||
+                "No email available"}
+            </strong>
+            {data.emailVerified ? (
+              <div className="security-inline-success">
+                <CheckCircle2 size={15} /> Email address is verified.
+              </div>
+            ) : (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setEmailVerified(true);
+                  toast({
+                    title: "Verification email requested",
+                    description:
+                      "Check the account inbox for the verification link.",
+                    tone: "success",
+                  });
+                }}
+              >
+                Resend verification email
+              </Button>
+            )}
+          </div>
+        </Card>
+        <Card className="security-status-card">
+          <div className="security-status-icon">
+            <Smartphone size={20} />
+          </div>
+          <div className="security-status-content">
+            <div className="security-title-row">
+              <h2>Authenticator app (MFA)</h2>
+              <Badge tone={data.mfaEnabled ? "success" : "neutral"}>
+                {data.mfaEnabled ? "Enabled" : "Not enabled"}
+              </Badge>
+            </div>
+            <p>
+              Add a second sign-in step using a time-based one-time password
+              from an authenticator app.
+            </p>
+            {data.mfaEnabled ? (
+              <div className="security-inline-success">
+                <CheckCircle2 size={15} /> Multi-factor authentication is
+                enabled in this workspace.
+              </div>
+            ) : (
+              <p className="muted-cell">
+                Recommended for users with access to financial and
+                administrative records.
+              </p>
+            )}
+            {data.mfaEnabled ? (
+              <Button
+                variant="danger"
+                onClick={() => {
+                  setError("");
+                  setDisableCode("");
+                  setDisableOpen(true);
+                }}
+              >
+                Disable MFA
+              </Button>
+            ) : (
+              <Button
+                onClick={async () => {
+                  setError("");
+                  setCode("");
+                  setSetupError("");
+                  try {
+                    const setup = await authApi.setupMfa();
+                    setSetupKey(setup.secret || "");
+                    setSetupOpen(true);
+                  } catch (e) {
+                    setSetupError(getApiErrorMessage(e));
+                    toast({
+                      title: "MFA setup failed",
+                      description: getApiErrorMessage(e),
+                      tone: "error",
+                    });
+                  }
+                }}
+              >
+                Set up MFA
+              </Button>
+            )}
+          </div>
+        </Card>
+      </div>
+      <Card className="settings-content">
+        <div className="settings-content-header">
+          <div>
+            <h2>Sign-in security</h2>
+            <p>
+              Access and multi-factor authentication are managed by the backend.
+            </p>
+          </div>
+        </div>
+        <div className="security-check-list">
+          <div>
+            <span className="security-list-icon">
+              <LockKeyhole size={17} />
+            </span>
+            <div>
+              <strong>Access token</strong>
+              <p>Short-lived token used for authenticated API requests.</p>
+            </div>
+            <Badge tone="info">Backend managed</Badge>
+          </div>
+          <div>
+            <span className="security-list-icon">
+              <KeyRound size={17} />
+            </span>
+            <div>
+              <strong>Refresh token</strong>
+              <p>
+                Stored in an HttpOnly cookie; not exposed to frontend
+                JavaScript.
+              </p>
+            </div>
+            <Badge tone="info">Backend managed</Badge>
+          </div>
+          <div>
+            <span className="security-list-icon">
+              <ShieldCheck size={17} />
+            </span>
+            <div>
+              <strong>Role permissions</strong>
+              <p>
+                Action visibility improves the UI, but real authorization must
+                always be enforced by the backend.
+              </p>
+            </div>
+            <Badge tone="success">Server enforced</Badge>
+          </div>
+        </div>
+        <Notice tone="info">
+          MFA setup and code verification are handled by the backend. Keep the
+          displayed setup secret private.
+        </Notice>
+      </Card>
+      <Dialog
+        open={setupOpen}
+        onOpenChange={setSetupOpen}
+        title="Set up authenticator app"
+        description="Scan the QR code with your authenticator app, then verify a six-digit code."
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setSetupOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() =>
+                document.getElementById("mfa-setup-submit")?.click()
+              }
+            >
+              Verify and enable
+            </Button>
+          </>
+        }
+      >
+        <form className="form-stack" onSubmit={verifySetup}>
+          <div className="totp-setup-layout">
+            <div
+              className="fake-qr"
+              aria-label="Decorative placeholder QR code"
+            >
+              <div className="qr-corner top-left" />
+              <div className="qr-corner top-right" />
+              <div className="qr-corner bottom-left" />
+              <div className="qr-random" />
+            </div>
+            <div>
+              <strong>Munshee</strong>
+              <p className="muted-cell">Manual setup key</p>
+              <code className="totp-key">{setupKey || "Loading secret…"}</code>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<Copy size={14} />}
+                onClick={() => {
+                  navigator.clipboard?.writeText(setupKey);
+                  toast({ title: "Setup key copied", tone: "info" });
+                }}
+              >
+                Copy key
+              </Button>
+            </div>
+          </div>
+          <Notice tone="warning">
+            Add this secret manually in your authenticator app, then enter the
+            current six-digit code to enable MFA.
+          </Notice>
+          <Field label="6-digit authenticator code" required error={error}>
+            <Input
+              className="otp-input"
+              inputMode="numeric"
+              maxLength={6}
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                setError("");
+              }}
+              placeholder="000 000"
+            />
+          </Field>
+          <button
+            id="mfa-setup-submit"
+            type="submit"
+            className="visually-hidden"
+          >
+            Enable MFA
+          </button>
+        </form>
+      </Dialog>
+      <Dialog
+        open={disableOpen}
+        onOpenChange={setDisableOpen}
+        title="Disable MFA?"
+        description="Verify the current authenticator code before disabling the extra sign-in step."
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDisableOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() =>
+                document.getElementById("mfa-disable-submit")?.click()
+              }
+            >
+              Disable MFA
+            </Button>
+          </>
+        }
+      >
+        <form className="form-stack" onSubmit={disable}>
+          <Notice tone="warning">
+            Disabling MFA reduces account protection. The real backend will
+            validate the TOTP code.
+          </Notice>
+          <Field label="6-digit authenticator code" required error={error}>
+            <Input
+              className="otp-input"
+              inputMode="numeric"
+              maxLength={6}
+              value={disableCode}
+              onChange={(e) => {
+                setDisableCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                setError("");
+              }}
+              placeholder="000 000"
+            />
+          </Field>
+          <button
+            id="mfa-disable-submit"
+            type="submit"
+            className="visually-hidden"
+          >
+            Disable
+          </button>
+        </form>
+      </Dialog>
+    </div>
+  );
+}

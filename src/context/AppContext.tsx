@@ -1,71 +1,1459 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { apiClient, getApiErrorMessage, setAccessToken, setUnauthorizedHandler, unwrap } from '@/lib/api/client';
-import { authApi, financeApi } from '@/lib/api/services';
-import { todayIso, uid } from '@/lib/utils';
-import type { Account, AppData, Bill, Category, CurrencyRate, DocumentItem, Invoice, InventoryItem, InventoryMovement, NotificationItem, Party, Payment, RecurringRule, Role, TeamMember, Transaction } from '@/types';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  apiClient,
+  getApiErrorMessage,
+  setAccessToken,
+  setUnauthorizedHandler,
+  unwrap,
+} from "@/lib/api/client";
+import { authApi, financeApi } from "@/lib/api/services";
+import { todayIso, uid } from "@/lib/utils";
+import type {
+  Account,
+  AppData,
+  Bill,
+  Category,
+  CurrencyRate,
+  DocumentItem,
+  Invoice,
+  InventoryItem,
+  InventoryMovement,
+  NotificationItem,
+  Party,
+  Payment,
+  RecurringRule,
+  Role,
+  TeamMember,
+  Transaction,
+} from "@/types";
 
-type Toast = { id: string; title: string; description?: string; tone: 'success'|'error'|'info' };
-type ToastInput = Omit<Toast,'id'>;
-type CreateTransactionInput = Omit<Transaction,'id'|'status'|'createdBy'|'source'> & { source?: Transaction['source'] };
-type InvoiceInput = Omit<Invoice,'id'|'number'|'status'|'paid'|'balance'|'payments'> & { status?: Invoice['status']; sourceDocumentId?: string };
-type BillInput = Omit<Bill,'id'|'number'|'status'|'paid'|'balance'|'payments'> & { status?: Bill['status']; sourceDocumentId?: string };
-type AppContextValue = {
- data: AppData; role: Role; setRole:(role:Role)=>void; signedIn:boolean; signIn:(role?:Role,user?:any)=>void; signOut:()=>void; toast:(input:ToastInput)=>void; dismissToast:(id:string)=>void; toasts:Toast[]; resetDemo:()=>void;
- addTransaction:(input:CreateTransactionInput)=>any; voidTransaction:(id:string,reason:string)=>void; addAccount:(input:any)=>void; updateAccount:(id:string,patch:any)=>void; toggleAccount:(id:string)=>void;
- addCategory:(input:any)=>void; updateCategory:(id:string,patch:any)=>void; toggleCategory:(id:string)=>void; addParty:(input:any)=>void; updateParty:(id:string,patch:any)=>void; toggleParty:(id:string)=>void;
- addInvoice:(input:InvoiceInput)=>any; updateInvoice:(id:string,patch:any)=>void; sendInvoice:(id:string)=>void; cancelInvoice:(id:string)=>void; addInvoicePayment:(id:string,input:any)=>void; reverseInvoicePayment:(invoiceId:string,paymentId:string)=>void;
- addBill:(input:BillInput)=>any; updateBill:(id:string,patch:any)=>void; receiveBill:(id:string)=>void; cancelBill:(id:string)=>void; addBillPayment:(id:string,input:any)=>void; reverseBillPayment:(billId:string,paymentId:string)=>void;
- addRecurring:(input:any)=>void; updateRecurring:(id:string,patch:any)=>void; executeRecurring:(id:string)=>void; addDocument:(input:any,file?:File)=>Promise<DocumentItem>; processDocument:(id:string)=>void; updateDocumentReview:(id:string,extracted:Record<string,string>,classification?:any)=>void; markDocumentConverted:(id:string,type:any,recordId:string)=>void; removeDocument:(id:string)=>void;
- addInventoryItem:(input:any)=>void; updateInventoryItem:(id:string,patch:any)=>void; adjustInventory:(id:string,input:any)=>void; markNotificationRead:(id:string)=>void; addTeamMember:(input:any)=>void; updateTeamMember:(id:string,patch:any)=>void; toggleTeamMember:(id:string)=>void; updateSettings:(patch:any)=>void; addCurrencyRate:(input:any)=>void; setMfaEnabled:(enabled:boolean,code?:string)=>void; setEmailVerified:(enabled:boolean)=>void; changePlan:(plan:any)=>void; reload:()=>Promise<void>; currentUser:any;
+type Toast = {
+  id: string;
+  title: string;
+  description?: string;
+  tone: "success" | "error" | "info";
 };
-const emptyData = ():AppData => ({accounts:[],categories:[],parties:[],transactions:[],invoices:[],bills:[],recurring:[],documents:[],inventory:[],notifications:[],team:[],auditLogs:[],currencyRates:[],settings:{name:'Munshee',country:'',currency:'PKR',timezone:'UTC'},subscription:{plan:'Free',status:'Active',periodStart:'',periodEnd:'',usersLimit:1,documentsLimit:0,usersUsed:0,documentsUsed:0},emailVerified:false,mfaEnabled:false});
-const arr=(v:any, keys:string[]=[]):any[]=>Array.isArray(v)?v:keys.map(k=>v?.[k]).find(Array.isArray)??[];
-const id=(x:any)=>String(x?._id??x?.id??'');
-const money=(v:any)=>String(v?.toString?.()??v??'0');
-const date=(v:any)=>v?new Date(v).toISOString():new Date().toISOString();
-const roleMap=(v:any):Role=>String(v).toLowerCase()==='admin'?'Admin':String(v).toLowerCase()==='employee'?'Employee':'Owner';
-const accountMap=(x:any):Account=>({id:id(x),name:x.name,type:({cash:'Cash',bank:'Bank',wallet:'Wallet',other:'Other'} as any)[x.type]??x.type,currency:x.currency??'PKR',openingBalance:money(x.openingBalance),currentBalance:money(x.currentBalance),description:x.description,status:x.isActive===false?'Inactive':'Active',isSystem:!!x.isSystem});
-const categoryMap=(x:any):Category=>({id:id(x),name:x.name,type:String(x.type).toLowerCase()==='income'?'Income':'Expense',description:x.description,status:x.isActive===false?'Inactive':'Active',isSystem:!!x.isSystem});
-const partyMap=(x:any):Party=>({id:id(x),name:x.name,company:x.companyName,type:x.type==='customer_vendor'?'Both':x.type==='customer'?'Customer':'Vendor',email:x.email,phone:x.phone,address:x.address,taxNumber:x.taxNumber,notes:x.notes,status:x.isActive===false?'Inactive':'Active'});
-const txMap=(x:any):Transaction=>({id:id(x),date:date(x.transactionDate),type:({income:'Income',expense:'Expense',transfer:'Transfer'} as any)[x.type]??x.type,description:x.description??'',accountId:id(x.accountId),destinationAccountId:x.destinationAccountId?id(x.destinationAccountId):undefined,categoryId:x.categoryId?id(x.categoryId):undefined,amount:money(x.amount),currency:x.currency??'PKR',status:x.status==='voided'?'Voided':'Posted',reference:x.reference,source:x.source??'manual',createdBy:x.createdBy?.name??x.createdBy??'',voidReason:x.voidReason});
-const itemMap=(x:any)=>({id:id(x)||uid('item'),description:x.description??'',quantity:money(x.quantity),unitPrice:money(x.unitPrice),categoryId:x.categoryId?id(x.categoryId):undefined});
-const invoiceMap=(x:any):Invoice=>({id:id(x),number:x.invoiceNumber??x.number??'',partyId:id(x.customerId??x.partyId),issueDate:date(x.issueDate),dueDate:date(x.dueDate),items:(x.items??[]).map(itemMap),subtotal:money(x.subtotal),discountRate:money(x.discountRate),taxRate:money(x.taxRate),discountAmount:money(x.discountAmount),taxAmount:money(x.taxAmount),total:money(x.totalAmount??x.total),paid:money(x.paidAmount??x.paid),balance:money(x.balanceDue??x.balance),status:({'draft':'Draft','sent':'Sent','partially_paid':'Partially Paid','paid':'Paid','cancelled':'Cancelled'} as any)[x.status]??x.status,notes:x.notes,terms:x.terms,payments:(x.payments??[]).map((p:any)=>({...p,id:id(p),date:date(p.paymentDate),amount:money(p.amount),accountId:id(p.accountId),categoryId:id(p.categoryId),status:((p.status==='reversed'||p.reversedAt)?'Reversed':'Recorded') as Payment['status'],reversedAt:p.reversedAt?date(p.reversedAt):undefined,transactionId:p.transactionId?String(p.transactionId):undefined}))});
-const billMap=(x:any):Bill=>({...invoiceMap({...x,customerId:x.vendorId,invoiceNumber:x.billNumber,issueDate:x.billDate,status:x.status==='received'?'sent':x.status}),number:x.billNumber??x.number,billDate:date(x.billDate),status:({'draft':'Draft','received':'Received','partially_paid':'Partially Paid','paid':'Paid','cancelled':'Cancelled'} as any)[x.status]??x.status} as any);
-const recurringMap=(x:any):RecurringRule=>({id:id(x),type:({income:'Income',expense:'Expense',transfer:'Transfer'} as any)[x.type]??x.type,amount:money(x.amount),description:x.description??'',accountId:id(x.accountId),destinationAccountId:x.destinationAccountId?id(x.destinationAccountId):undefined,categoryId:x.categoryId?id(x.categoryId):undefined,frequency:({daily:'Daily',weekly:'Weekly',monthly:'Monthly',yearly:'Yearly',custom:'Custom'} as any)[x.frequency]??x.frequency,intervalDays:x.intervalDays,startDate:date(x.startDate),endDate:x.endDate?date(x.endDate):undefined,nextRunDate:date(x.nextRunDate),isActive:x.isActive!==false,executionCount:x.executionCount??0,lastExecutedAt:x.lastExecutedAt?date(x.lastExecutedAt):undefined,lastExecutionError:x.lastExecutionError});
-const docType=(v:any):any=>({'invoice':'Invoice','bill':'Bill','receipt':'Receipt','expense_receipt':'Expense','expense':'Expense','income_receipt':'Income','income':'Income','statement':'Statement','unknown':'Unknown','other':'Other'} as any)[String(v??'other').toLowerCase()]??'Other';
-const documentMap=(x:any):DocumentItem=>({id:id(x),name:x.originalFileName??x.name??'',originalName:x.originalFileName??x.originalName??'',mimeType:x.mimeType??'',size:x.fileSize??x.size??0,uploadedAt:date(x.createdAt??x.uploadedAt),type:docType(x.documentType??x.type),processingStatus:({uploading:'Uploaded',uploaded:'Uploaded',processing:'Processing',processed:'Processed',failed:'Failed'} as any)[x.processingStatus]??'Uploaded',classification:docType(x.classification??x.documentType),confidence:x.classificationConfidence??x.confidence??0,conversionStatus:(x.conversion?.status==='converted'||x.convertedRecordId)?'Converted':'Not converted',convertedRecordType:({'invoice':'Invoice','bill':'Bill','transaction':'Transaction'} as any)[String(x.conversion?.targetType??x.convertedRecordType??'').toLowerCase()],convertedRecordId:x.conversion?.targetId?String(x.conversion.targetId):x.convertedRecordId,extracted:x.extractedData?.ai?.fields??x.extractedData?.extracted?.fields??x.extractedData?.reviewedFields??x.extractedData??{},rawText:x.extractedData?.ocr?.rawText??x.rawText??''});
-const AppContext=createContext<AppContextValue|null>(null);
-export function AppProvider({children}:{children:ReactNode}){
- const [data,setData]=useState<AppData>(emptyData); const [role,setRoleState]=useState<Role>('Owner'); const [signedIn,setSignedIn]=useState(false); const [currentUser,setCurrentUser]=useState<any>(null); const [toasts,setToasts]=useState<Toast[]>([]); const [loading,setLoading]=useState(false);
- const toast=useCallback((input:ToastInput)=>{const toastId=uid('toast');setToasts(p=>[...p,{...input,id:toastId}]);window.setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==toastId)),4200)},[]);
- const dismissToast=useCallback((toastId:string)=>setToasts(p=>p.filter(t=>t.id!==toastId)),[]);
- const signOut=useCallback(async()=>{try{await authApi.logout()}catch{}setAccessToken(null);setSignedIn(false);setCurrentUser(null);setData(emptyData())},[]);
- const setRole=useCallback((r:Role)=>{if(currentUser){toast({title:'Role is managed by your account',description:'Munshee uses the role returned by the backend.',tone:'info'});return;}setRoleState(r)},[currentUser,toast]);
- const reload=useCallback(async()=>{if(!signedIn)return;setLoading(true);const get=async <T,>(fn:()=>Promise<any>,fallback:T):Promise<any>=>{try{return await fn()}catch{return fallback}};
-  const [business,accounts,categories,parties,transactions,invoices,bills,recurring,documents,inventory,notifications,team,audit,subscription,rates]=await Promise.all([
-   get(()=>financeApi.business(),{}),get(()=>financeApi.accounts(),{accounts:[]}),get(()=>financeApi.categories(),{categories:[]}),get(()=>financeApi.parties(),{parties:[]}),get(()=>financeApi.transactions(),{transactions:[]}),get(()=>financeApi.invoices(),{invoices:[]}),get(()=>financeApi.bills(),{bills:[]}),get(()=>financeApi.recurring(),{recurringTransactions:[]}),get(()=>financeApi.documents(),{documents:[]}),get(()=>financeApi.inventory(),{items:[]}),get(()=>financeApi.notifications(),{notifications:[]}),get(()=>financeApi.team(),{users:[]}),get(()=>financeApi.auditLogs(),{logs:[]}),get(()=>financeApi.subscription(),{}),get(()=>financeApi.currencyRates(),{rates:[]})
-  ]);
-  const b=business.business??business;const invoiceRows=arr(invoices,['invoices','data']);const billRows=arr(bills,['bills','data']);const [invoiceWithPayments,billWithPayments]=await Promise.all([Promise.all(invoiceRows.map(async(x:any)=>{try{const p=await financeApi.invoicePayments(id(x));return {...x,payments:arr(p,['payments','data'])}}catch{return x}})),Promise.all(billRows.map(async(x:any)=>{try{const p=await financeApi.billPayments(id(x));return {...x,payments:arr(p,['payments','data'])}}catch{return x}}))]); setData({accounts:arr(accounts,['accounts']).map(accountMap),categories:arr(categories,['categories']).map(categoryMap),parties:arr(parties,['parties']).map(partyMap),transactions:arr(transactions,['transactions','data']).map(txMap),invoices:invoiceWithPayments.map(invoiceMap),bills:billWithPayments.map(billMap),recurring:arr(recurring,['recurringTransactions','recurring','rules','data']).map(recurringMap),documents:arr(documents,['documents','data']).map(documentMap),inventory:arr(inventory,['items','inventory','data']).map((x:any)=>({id:id(x),sku:x.sku,name:x.name,description:x.description,unit:x.unit??'unit',quantity:Number(x.quantity??0),reorderLevel:Number(x.reorderLevel??0),unitCost:money(x.unitCost),currency:x.currency??b.currency??'PKR',status:x.isActive===false?'Inactive':'Active',movements:[]})),notifications:arr(notifications,['notifications','data']).map((x:any)=>({id:id(x),title:x.title,message:x.message,type:x.type??'Information',createdAt:date(x.createdAt),readAt:x.readAt?date(x.readAt):undefined,href:x.href})),team:arr(team,['users','data']).map((x:any)=>({id:id(x),name:x.name,email:x.email,role:roleMap(x.role),status:x.isActive===false?'Inactive':'Active',createdAt:date(x.createdAt),lastLoginAt:x.lastLoginAt?date(x.lastLoginAt):undefined})),auditLogs:arr(audit,['logs','auditLogs','data']).map((x:any)=>({id:id(x),createdAt:date(x.createdAt),user:x.user?.name??x.userId?.name??'User',action:x.action,method:x.method,path:x.path,statusCode:x.statusCode??200,resourceType:x.resourceType,resourceId:x.resourceId,ip:x.ip,metadata:JSON.stringify(x.metadata??'')})),currencyRates:arr(rates,['rates','currencyRates','data']).map((x:any)=>({id:id(x),baseCurrency:x.baseCurrency,quoteCurrency:x.quoteCurrency,rate:money(x.rate),effectiveAt:date(x.effectiveAt),source:x.source??'manual'})),settings:{name:b.name??'Munshee',country:b.country??'',currency:b.currency??'PKR',timezone:b.timezone??'UTC'},subscription:(()=>{const s=subscription.subscription??subscription;return {plan:String(s.plan??'free').replace(/^./, (m:string)=>m.toUpperCase()) as any,status:s.status??'Active',periodStart:date(s.currentPeriodStart??s.periodStart),periodEnd:date(s.currentPeriodEnd??s.periodEnd),usersLimit:s.limits?.users??s.usersLimit??1,documentsLimit:s.limits?.documents??s.documentsLimit??0,usersUsed:s.usersUsed??0,documentsUsed:s.documentsUsed??0}})(),emailVerified:!!(currentUser?.emailVerified??currentUser?.isEmailVerified),mfaEnabled:!!currentUser?.mfaEnabled});setLoading(false)
- },[signedIn,currentUser]);
- useEffect(()=>{setUnauthorizedHandler(()=>{setSignedIn(false);setCurrentUser(null);setData(emptyData())});let alive=true;(async()=>{try{const r=await apiClient.post('/auth/refresh');const token=r.data?.data?.accessToken;if(token&&alive){setAccessToken(token);const [profile,authProfile]=await Promise.all([financeApi.business(),financeApi.authTest()]);if(alive){setCurrentUser(authProfile?.user??null);setRoleState(roleMap(authProfile?.user?.role));setSignedIn(true);setData(d=>({...d,settings:{...d.settings,...(profile.business??profile)}}));void reload()}}}catch{setSignedIn(false)}})();return()=>{alive=false;setUnauthorizedHandler(null)}},[]);
- useEffect(()=>{if(signedIn)void reload()},[signedIn]);
- const signIn=useCallback((r:Role= 'Owner',user?:any)=>{setRoleState(r);if(user)setCurrentUser(user);setSignedIn(true)},[]);
- const run=useCallback(async(fn:()=>Promise<any>,success:string)=>{try{await fn();await reload();toast({title:success,tone:'success'})}catch(e){toast({title:'Request failed',description:getApiErrorMessage(e),tone:'error'})}},[reload,toast]);
- const addTransaction=useCallback(async(x:CreateTransactionInput)=>{try{const payload:any={type:x.type.toLowerCase(),amount:String(x.amount),transactionDate:new Date(x.date).toISOString(),description:x.description,reference:x.reference,accountId:x.accountId,...(x.type==='Transfer'?{destinationAccountId:x.destinationAccountId}:{categoryId:x.categoryId}),source:x.source==='ai'?'ai':'manual'};const result=await financeApi.createTransaction(payload);await reload();toast({title:'Transaction created',tone:'success'});return txMap(result.transaction??result)}catch(e){toast({title:'Transaction failed',description:getApiErrorMessage(e),tone:'error'});throw e}},[reload,toast]);
- const voidTransaction=useCallback((id:string,reason:string)=>void run(()=>financeApi.voidTransaction(id,reason),'Transaction voided'),[run]);
- const addAccount=useCallback((x:any)=>void run(()=>financeApi.createAccount({name:x.name,type:String(x.type).toLowerCase(),currency:x.currency,openingBalance:String(x.openingBalance??'0'),description:x.description}),'Account created'),[run]);
- const updateAccount=useCallback((id:string,x:any)=>void run(()=>financeApi.updateAccount(id,{name:x.name,description:x.description}),'Account updated'),[run]); const toggleAccount=useCallback((id:string)=>{const a=data.accounts.find(x=>x.id===id);if(a)void run(()=>financeApi.accountStatus(id,a.status!=='Active'),'Account status updated')},[data.accounts,run]);
- const addCategory=useCallback((x:any)=>void run(()=>financeApi.createCategory({name:x.name,type:String(x.type).toLowerCase(),description:x.description}),'Category created'),[run]); const updateCategory=useCallback((id:string,x:any)=>void run(()=>financeApi.updateCategory(id,{name:x.name,description:x.description}),'Category updated'),[run]); const toggleCategory=useCallback((id:string)=>{const c=data.categories.find(x=>x.id===id);if(c)void run(()=>financeApi.categoryStatus(id,c.status!=='Active'),'Category status updated')},[data.categories,run]);
- const addParty=useCallback((x:any)=>void run(()=>financeApi.createParty({name:x.name,type:x.type==='Both'?'customer_vendor':String(x.type).toLowerCase(),email:x.email,phone:x.phone,companyName:x.company,address:x.address,taxNumber:x.taxNumber,notes:x.notes}),'Party created'),[run]); const updateParty=useCallback((id:string,x:any)=>void run(()=>financeApi.updateParty(id,{name:x.name,email:x.email,phone:x.phone,companyName:x.company,address:x.address,taxNumber:x.taxNumber,notes:x.notes}),'Party updated'),[run]); const toggleParty=useCallback((id:string)=>{const p=data.parties.find(x=>x.id===id);if(p)void run(()=>financeApi.partyStatus(id,p.status!=='Active'),'Party status updated')},[data.parties,run]);
- const addInvoice=useCallback(async(x:InvoiceInput)=>{try{const payload={customerId:x.partyId,issueDate:new Date(x.issueDate).toISOString(),dueDate:new Date(x.dueDate).toISOString(),items:x.items.map(i=>({description:i.description,quantity:String(i.quantity),unitPrice:String(i.unitPrice),categoryId:i.categoryId})),discountRate:String(x.discountRate??'0'),taxRate:String(x.taxRate??'0'),notes:x.notes,terms:x.terms};const result=await financeApi.createInvoice(payload);await reload();toast({title:'Invoice created',tone:'success'});return invoiceMap(result.invoice??result)}catch(e){toast({title:'Invoice creation failed',description:getApiErrorMessage(e),tone:'error'});throw e}},[reload,toast]); const updateInvoice=useCallback((id:string,x:any)=>{const current=data.invoices.find(i=>i.id===id);if(!current)return;void run(()=>financeApi.updateInvoice(id,{customerId:x.partyId??current.partyId,issueDate:new Date(x.issueDate??current.issueDate).toISOString(),dueDate:new Date(x.dueDate??current.dueDate).toISOString(),items:(x.items??current.items).map((i:any)=>({description:i.description,quantity:String(i.quantity),unitPrice:String(i.unitPrice),categoryId:i.categoryId})),discountRate:String(x.discountRate??current.discountRate),taxRate:String(x.taxRate??current.taxRate),notes:x.notes??current.notes,terms:x.terms??current.terms}),'Invoice updated')},[data.invoices,run]); const sendInvoice=useCallback((id:string)=>void run(()=>financeApi.invoiceStatus(id,'sent'),'Invoice marked as sent'),[run]); const cancelInvoice=useCallback((id:string)=>void run(()=>financeApi.invoiceStatus(id,'cancelled'),'Invoice cancelled'),[run]); const addInvoicePayment=useCallback((id:string,x:any)=>void run(()=>financeApi.createInvoicePayment(id,{accountId:x.accountId,categoryId:x.categoryId,amount:String(x.amount),paymentDate:new Date(x.date).toISOString(),reference:x.reference,notes:x.notes}),'Invoice payment recorded'),[run]); const reverseInvoicePayment=useCallback((_id:string,pid:string)=>void run(()=>financeApi.reverseInvoicePayment(pid),'Invoice payment reversed'),[run]);
- const addBill=useCallback(async(x:BillInput)=>{try{const result=await financeApi.createBill({vendorId:x.partyId,billDate:new Date(x.billDate).toISOString(),dueDate:new Date(x.dueDate).toISOString(),items:x.items.map(i=>({description:i.description,quantity:String(i.quantity),unitPrice:String(i.unitPrice),categoryId:i.categoryId})),discountRate:String(x.discountRate??'0'),taxRate:String(x.taxRate??'0'),notes:x.notes,terms:x.terms});await reload();toast({title:'Bill created',tone:'success'});return billMap(result.bill??result)}catch(e){toast({title:'Bill creation failed',description:getApiErrorMessage(e),tone:'error'});throw e}},[reload,toast]); const updateBill=useCallback((id:string,x:any)=>{const current=data.bills.find(i=>i.id===id);if(!current)return;void run(()=>financeApi.updateBill(id,{vendorId:x.partyId??current.partyId,billDate:new Date(x.billDate??current.billDate).toISOString(),dueDate:new Date(x.dueDate??current.dueDate).toISOString(),items:(x.items??current.items).map((i:any)=>({description:i.description,quantity:String(i.quantity),unitPrice:String(i.unitPrice),categoryId:i.categoryId})),discountRate:String(x.discountRate??current.discountRate),taxRate:String(x.taxRate??current.taxRate),notes:x.notes??current.notes,terms:x.terms??current.terms}),'Bill updated')},[data.bills,run]); const receiveBill=useCallback((id:string)=>void run(()=>financeApi.billStatus(id,'received'),'Bill marked as received'),[run]); const cancelBill=useCallback((id:string)=>void run(()=>financeApi.billStatus(id,'cancelled'),'Bill cancelled'),[run]); const addBillPayment=useCallback((id:string,x:any)=>void run(()=>financeApi.createBillPayment(id,{accountId:x.accountId,categoryId:x.categoryId,amount:String(x.amount),paymentDate:new Date(x.date).toISOString(),reference:x.reference,notes:x.notes}),'Bill payment recorded'),[run]); const reverseBillPayment=useCallback((_id:string,pid:string)=>void run(()=>financeApi.reverseBillPayment(pid),'Bill payment reversed'),[run]);
- const addRecurring=useCallback((x:any)=>void run(()=>financeApi.createRecurring({type:String(x.type).toLowerCase(),amount:String(x.amount),description:x.description,accountId:x.accountId,destinationAccountId:x.destinationAccountId,categoryId:x.categoryId,frequency:String(x.frequency).toLowerCase(),intervalDays:Number(x.intervalDays)||undefined,startDate:new Date(x.startDate).toISOString(),endDate:x.endDate?new Date(x.endDate).toISOString():null}),'Recurring rule created'),[run]); const updateRecurring=useCallback((id:string,x:any)=>{const item=data.recurring.find(r=>r.id===id);if(item)void run(()=>financeApi.recurringStatus(id,Boolean(x.isActive??!item.isActive)),'Recurring rule updated')},[data.recurring,run]); const executeRecurring=useCallback((id:string)=>void run(()=>financeApi.executeRecurring(id),'Recurring transaction executed'),[run]);
- const addDocument=useCallback(async(x:any,file?:File)=>{if(!file)throw new Error('Select a file to upload.');try{const initialized=await financeApi.initDocumentUpload({originalFileName:file.name,mimeType:file.type,fileSize:file.size,documentType:({Invoice:'invoice',Bill:'bill',Receipt:'receipt',Expense:'expense_receipt',Income:'income_receipt',Statement:'statement'} as any)[x.type]??'other'});const doc=initialized.document;const upload=initialized.upload;const form=new FormData();form.append('file',file);form.append('api_key',upload.apiKey);form.append('timestamp',String(upload.timestamp));form.append('signature',upload.signature);form.append('folder',upload.folder);form.append('public_id',upload.publicId);const cloud=await fetch(upload.uploadUrl,{method:'POST',body:form});const cloudData=await cloud.json();if(!cloud.ok)throw new Error(cloudData?.error?.message||'Cloudinary upload failed.');await financeApi.completeDocumentUpload(id(doc),{publicId:cloudData.public_id,secureUrl:cloudData.secure_url,resourceType:cloudData.resource_type,format:cloudData.format});await reload();toast({title:'Document uploaded',description:'Your file is stored and ready for OCR processing.',tone:'success'});return documentMap({...doc,processingStatus:'uploaded',cloudinary:{secureUrl:cloudData.secure_url}})}catch(e){toast({title:'Document upload failed',description:getApiErrorMessage(e),tone:'error'});throw e}},[reload,toast]); const processDocument=useCallback((id:string)=>void run(async()=>{await financeApi.processDocument(id);try{await financeApi.classifyDocument(id)}catch{}try{await financeApi.extractDocumentAi(id)}catch{}},'Document processed'),[run]); const updateDocumentReview=useCallback((id:string,extracted:any)=>void run(()=>financeApi.reviewDocument(id,{...data.documents.find(d=>d.id===id)?.extracted,reviewedFields:extracted}),'Document review saved'),[run,data.documents]); const markDocumentConverted=useCallback((id:string,type:any,recordId:string)=>{void id;void type;void recordId;toast({title:'Use document conversion workflow',description:'Conversion requires the target record fields and is handled in the document review screen.',tone:'info'})},[toast]); const removeDocument=useCallback((id:string)=>void run(()=>financeApi.deleteDocument(id),'Document deleted'),[run]);
- const addInventoryItem=useCallback((x:any)=>void run(()=>financeApi.createInventory({sku:x.sku,name:x.name,description:x.description,unit:x.unit,quantity:String(x.quantity??'0'),reorderLevel:String(x.reorderLevel??'0'),unitCost:String(x.unitCost??'0')}),'Inventory item created'),[run]); const updateInventoryItem=useCallback((_id:string,_x:any)=>toast({title:'Inventory item editing is not supported',description:'The backend currently supports create and stock adjustment only.',tone:'info'}),[toast]); const adjustInventory=useCallback((id:string,x:any)=>void run(()=>financeApi.adjustInventory(id,{quantity:String(x.quantityDelta??x.quantity),type:String(x.type??'adjustment').toLowerCase(),unitCost:String(x.unitCost??'0'),reference:x.reference,notes:x.notes}),'Stock adjusted'),[run]); const markNotificationRead=useCallback((id:string)=>void run(()=>financeApi.readNotification(id),'Notification marked read'),[run]); const addTeamMember=useCallback((x:any)=>void run(()=>financeApi.createUser({name:x.name,email:x.email,role:String(x.role).toLowerCase(),password:x.password}),'Team member created'),[run]); const updateTeamMember=useCallback((id:string,x:any)=>void run(()=>financeApi.updateUser(id,{name:x.name,role:String(x.role).toLowerCase()}),'Team member updated'),[run]); const toggleTeamMember=useCallback((id:string)=>{const x=data.team.find(t=>t.id===id);if(x)void run(()=>financeApi.userStatus(id,x.status!=='Active'),'Team member status updated')},[data.team,run]); const updateSettings=useCallback((x:any)=>void run(()=>financeApi.updateBusiness({name:x.name,country:x.country,currency:x.currency,timezone:x.timezone}),'Business settings updated'),[run]); const addCurrencyRate=useCallback((x:CurrencyRate)=>void run(()=>financeApi.createCurrencyRate({baseCurrency:x.baseCurrency,quoteCurrency:x.quoteCurrency,rate:String(x.rate),effectiveAt:new Date(x.effectiveAt).toISOString(),source:x.source}),'Currency rate added'),[run]); const setMfaEnabled=useCallback((enabled:boolean,code?:string)=>{if(!code){toast({title:'Authenticator code required',tone:'error'});return;}void (async()=>{try{if(enabled)await authApi.enableMfa(code);else await authApi.disableMfa(code);setCurrentUser((u:any)=>({...u,mfaEnabled:enabled}));setData(d=>({...d,mfaEnabled:enabled}));toast({title:enabled?'MFA enabled':'MFA disabled',tone:'success'});}catch(e){toast({title:'MFA update failed',description:getApiErrorMessage(e),tone:'error'})}})()},[toast]); const setEmailVerified=useCallback((enabled:boolean)=>{if(enabled)void run(()=>authApi.resendVerification(),'Verification email sent');else toast({title:'Verification required',tone:'info'})},[run,toast]); const changePlan=useCallback((plan:any)=>void run(()=>financeApi.updateSubscription(String(plan).toLowerCase()),'Subscription updated'),[run]); const resetDemo=useCallback(()=>toast({title:'Demo reset unavailable',description:'Munshee uses live server data; live records cannot be restored from the frontend.',tone:'info'}),[toast]);
- const value=useMemo<AppContextValue>(()=>({data,role,setRole,signedIn,signIn,signOut,toast,dismissToast,toasts,resetDemo,addTransaction,voidTransaction,addAccount,updateAccount,toggleAccount,addCategory,updateCategory,toggleCategory,addParty,updateParty,toggleParty,addInvoice,updateInvoice,sendInvoice,cancelInvoice,addInvoicePayment,reverseInvoicePayment,addBill,updateBill,receiveBill,cancelBill,addBillPayment,reverseBillPayment,addRecurring,updateRecurring,executeRecurring,addDocument,processDocument,updateDocumentReview,markDocumentConverted,removeDocument,addInventoryItem,updateInventoryItem,adjustInventory,markNotificationRead,addTeamMember,updateTeamMember,toggleTeamMember,updateSettings,addCurrencyRate,setMfaEnabled,setEmailVerified,changePlan,reload,currentUser}),[data,role,setRole,signedIn,signIn,signOut,toast,dismissToast,toasts,resetDemo,addTransaction,voidTransaction,addAccount,updateAccount,toggleAccount,addCategory,updateCategory,toggleCategory,addParty,updateParty,toggleParty,addInvoice,updateInvoice,sendInvoice,cancelInvoice,addInvoicePayment,reverseInvoicePayment,addBill,updateBill,receiveBill,cancelBill,addBillPayment,reverseBillPayment,addRecurring,updateRecurring,executeRecurring,addDocument,processDocument,updateDocumentReview,markDocumentConverted,removeDocument,addInventoryItem,updateInventoryItem,adjustInventory,markNotificationRead,addTeamMember,updateTeamMember,toggleTeamMember,updateSettings,addCurrencyRate,setMfaEnabled,setEmailVerified,changePlan,reload,currentUser]);
- return <AppContext.Provider value={value}>{children}<ToastViewport toasts={toasts} onDismiss={dismissToast}/></AppContext.Provider>;
+type ToastInput = Omit<Toast, "id">;
+type CreateTransactionInput = Omit<
+  Transaction,
+  "id" | "status" | "createdBy" | "source"
+> & { source?: Transaction["source"] };
+type InvoiceInput = Omit<
+  Invoice,
+  "id" | "number" | "status" | "paid" | "balance" | "payments"
+> & { status?: Invoice["status"]; sourceDocumentId?: string };
+type BillInput = Omit<
+  Bill,
+  "id" | "number" | "status" | "paid" | "balance" | "payments"
+> & { status?: Bill["status"]; sourceDocumentId?: string };
+type AppContextValue = {
+  data: AppData;
+  role: Role;
+  setRole: (role: Role) => void;
+  signedIn: boolean;
+  signIn: (role?: Role, user?: any) => void;
+  signOut: () => void;
+  toast: (input: ToastInput) => void;
+  dismissToast: (id: string) => void;
+  toasts: Toast[];
+  resetDemo: () => void;
+  addTransaction: (input: CreateTransactionInput) => any;
+  voidTransaction: (id: string, reason: string) => void;
+  addAccount: (input: any) => void;
+  updateAccount: (id: string, patch: any) => void;
+  toggleAccount: (id: string) => void;
+  addCategory: (input: any) => void;
+  updateCategory: (id: string, patch: any) => void;
+  toggleCategory: (id: string) => void;
+  addParty: (input: any) => void;
+  updateParty: (id: string, patch: any) => void;
+  toggleParty: (id: string) => void;
+  addInvoice: (input: InvoiceInput) => any;
+  updateInvoice: (id: string, patch: any) => void;
+  sendInvoice: (id: string) => void;
+  cancelInvoice: (id: string) => void;
+  addInvoicePayment: (id: string, input: any) => void;
+  reverseInvoicePayment: (invoiceId: string, paymentId: string) => void;
+  addBill: (input: BillInput) => any;
+  updateBill: (id: string, patch: any) => void;
+  receiveBill: (id: string) => void;
+  cancelBill: (id: string) => void;
+  addBillPayment: (id: string, input: any) => void;
+  reverseBillPayment: (billId: string, paymentId: string) => void;
+  addRecurring: (input: any) => void;
+  updateRecurring: (id: string, patch: any) => void;
+  executeRecurring: (id: string) => void;
+  addDocument: (input: any, file?: File) => Promise<DocumentItem>;
+  processDocument: (id: string) => void;
+  updateDocumentReview: (
+    id: string,
+    extracted: Record<string, string>,
+    classification?: any,
+  ) => void;
+  markDocumentConverted: (id: string, type: any, recordId: string) => void;
+  removeDocument: (id: string) => void;
+  addInventoryItem: (input: any) => void;
+  updateInventoryItem: (id: string, patch: any) => void;
+  adjustInventory: (id: string, input: any) => void;
+  markNotificationRead: (id: string) => void;
+  addTeamMember: (input: any) => void;
+  updateTeamMember: (id: string, patch: any) => void;
+  toggleTeamMember: (id: string) => void;
+  updateSettings: (patch: any) => void;
+  addCurrencyRate: (input: any) => void;
+  setMfaEnabled: (enabled: boolean, code?: string) => void;
+  setEmailVerified: (enabled: boolean) => void;
+  changePlan: (plan: any) => void;
+  reload: () => Promise<void>;
+  currentUser: any;
+};
+const emptyData = (): AppData => ({
+  accounts: [],
+  categories: [],
+  parties: [],
+  transactions: [],
+  invoices: [],
+  bills: [],
+  recurring: [],
+  documents: [],
+  inventory: [],
+  notifications: [],
+  team: [],
+  auditLogs: [],
+  currencyRates: [],
+  settings: { name: "Munshee", country: "", currency: "PKR", timezone: "UTC" },
+  subscription: {
+    plan: "Free",
+    status: "Active",
+    periodStart: "",
+    periodEnd: "",
+    usersLimit: 1,
+    documentsLimit: 0,
+    usersUsed: 0,
+    documentsUsed: 0,
+  },
+  emailVerified: false,
+  mfaEnabled: false,
+});
+const arr = (v: any, keys: string[] = []): any[] =>
+  Array.isArray(v) ? v : (keys.map((k) => v?.[k]).find(Array.isArray) ?? []);
+const id = (x: any) => String(x?._id ?? x?.id ?? "");
+const money = (v: any) => String(v?.toString?.() ?? v ?? "0");
+const date = (v: any) =>
+  v ? new Date(v).toISOString() : new Date().toISOString();
+const roleMap = (v: any): Role =>
+  String(v).toLowerCase() === "admin"
+    ? "Admin"
+    : String(v).toLowerCase() === "employee"
+      ? "Employee"
+      : "Owner";
+const accountMap = (x: any): Account => ({
+  id: id(x),
+  name: x.name,
+  type:
+    ({ cash: "Cash", bank: "Bank", wallet: "Wallet", other: "Other" } as any)[
+      x.type
+    ] ?? x.type,
+  currency: x.currency ?? "PKR",
+  openingBalance: money(x.openingBalance),
+  currentBalance: money(x.currentBalance),
+  description: x.description,
+  status: x.isActive === false ? "Inactive" : "Active",
+  isSystem: !!x.isSystem,
+});
+const categoryMap = (x: any): Category => ({
+  id: id(x),
+  name: x.name,
+  type: String(x.type).toLowerCase() === "income" ? "Income" : "Expense",
+  description: x.description,
+  status: x.isActive === false ? "Inactive" : "Active",
+  isSystem: !!x.isSystem,
+});
+const partyMap = (x: any): Party => ({
+  id: id(x),
+  name: x.name,
+  company: x.companyName,
+  type:
+    x.type === "customer_vendor"
+      ? "Both"
+      : x.type === "customer"
+        ? "Customer"
+        : "Vendor",
+  email: x.email,
+  phone: x.phone,
+  address: x.address,
+  taxNumber: x.taxNumber,
+  notes: x.notes,
+  status: x.isActive === false ? "Inactive" : "Active",
+});
+const txMap = (x: any): Transaction => ({
+  id: id(x),
+  date: date(x.transactionDate),
+  type:
+    ({ income: "Income", expense: "Expense", transfer: "Transfer" } as any)[
+      x.type
+    ] ?? x.type,
+  description: x.description ?? "",
+  accountId: id(x.accountId),
+  destinationAccountId: x.destinationAccountId
+    ? id(x.destinationAccountId)
+    : undefined,
+  categoryId: x.categoryId ? id(x.categoryId) : undefined,
+  amount: money(x.amount),
+  currency: x.currency ?? "PKR",
+  status: x.status === "voided" ? "Voided" : "Posted",
+  reference: x.reference,
+  source: x.source ?? "manual",
+  createdBy: x.createdBy?.name ?? x.createdBy ?? "",
+  voidReason: x.voidReason,
+});
+const itemMap = (x: any) => ({
+  id: id(x) || uid("item"),
+  description: x.description ?? "",
+  quantity: money(x.quantity),
+  unitPrice: money(x.unitPrice),
+  categoryId: x.categoryId ? id(x.categoryId) : undefined,
+});
+const invoiceMap = (x: any): Invoice => ({
+  id: id(x),
+  number: x.invoiceNumber ?? x.number ?? "",
+  partyId: id(x.customerId ?? x.partyId),
+  issueDate: date(x.issueDate),
+  dueDate: date(x.dueDate),
+  items: (x.items ?? []).map(itemMap),
+  subtotal: money(x.subtotal),
+  discountRate: money(x.discountRate),
+  taxRate: money(x.taxRate),
+  discountAmount: money(x.discountAmount),
+  taxAmount: money(x.taxAmount),
+  total: money(x.totalAmount ?? x.total),
+  paid: money(x.paidAmount ?? x.paid),
+  balance: money(x.balanceDue ?? x.balance),
+  status:
+    (
+      {
+        draft: "Draft",
+        sent: "Sent",
+        partially_paid: "Partially Paid",
+        paid: "Paid",
+        cancelled: "Cancelled",
+      } as any
+    )[x.status] ?? x.status,
+  notes: x.notes,
+  terms: x.terms,
+  payments: (x.payments ?? []).map((p: any) => ({
+    ...p,
+    id: id(p),
+    date: date(p.paymentDate),
+    amount: money(p.amount),
+    accountId: id(p.accountId),
+    categoryId: id(p.categoryId),
+    status: (p.status === "reversed" || p.reversedAt
+      ? "Reversed"
+      : "Recorded") as Payment["status"],
+    reversedAt: p.reversedAt ? date(p.reversedAt) : undefined,
+    transactionId: p.transactionId ? String(p.transactionId) : undefined,
+  })),
+});
+const billMap = (x: any): Bill =>
+  ({
+    ...invoiceMap({
+      ...x,
+      customerId: x.vendorId,
+      invoiceNumber: x.billNumber,
+      issueDate: x.billDate,
+      status: x.status === "received" ? "sent" : x.status,
+    }),
+    number: x.billNumber ?? x.number,
+    billDate: date(x.billDate),
+    status:
+      (
+        {
+          draft: "Draft",
+          received: "Received",
+          partially_paid: "Partially Paid",
+          paid: "Paid",
+          cancelled: "Cancelled",
+        } as any
+      )[x.status] ?? x.status,
+  }) as any;
+const recurringMap = (x: any): RecurringRule => ({
+  id: id(x),
+  type:
+    ({ income: "Income", expense: "Expense", transfer: "Transfer" } as any)[
+      x.type
+    ] ?? x.type,
+  amount: money(x.amount),
+  description: x.description ?? "",
+  accountId: id(x.accountId),
+  destinationAccountId: x.destinationAccountId
+    ? id(x.destinationAccountId)
+    : undefined,
+  categoryId: x.categoryId ? id(x.categoryId) : undefined,
+  frequency:
+    (
+      {
+        daily: "Daily",
+        weekly: "Weekly",
+        monthly: "Monthly",
+        yearly: "Yearly",
+        custom: "Custom",
+      } as any
+    )[x.frequency] ?? x.frequency,
+  intervalDays: x.intervalDays,
+  startDate: date(x.startDate),
+  endDate: x.endDate ? date(x.endDate) : undefined,
+  nextRunDate: date(x.nextRunDate),
+  isActive: x.isActive !== false,
+  executionCount: x.executionCount ?? 0,
+  lastExecutedAt: x.lastExecutedAt ? date(x.lastExecutedAt) : undefined,
+  lastExecutionError: x.lastExecutionError,
+});
+const docType = (v: any): any =>
+  (
+    ({
+      invoice: "Invoice",
+      bill: "Bill",
+      receipt: "Receipt",
+      expense_receipt: "Expense",
+      expense: "Expense",
+      income_receipt: "Income",
+      income: "Income",
+      statement: "Statement",
+      unknown: "Unknown",
+      other: "Other",
+    }) as any
+  )[String(v ?? "other").toLowerCase()] ?? "Other";
+const documentMap = (x: any): DocumentItem => ({
+  id: id(x),
+  name: x.originalFileName ?? x.name ?? "",
+  originalName: x.originalFileName ?? x.originalName ?? "",
+  mimeType: x.mimeType ?? "",
+  size: x.fileSize ?? x.size ?? 0,
+  uploadedAt: date(x.createdAt ?? x.uploadedAt),
+  type: docType(x.documentType ?? x.type),
+  processingStatus:
+    (
+      {
+        uploading: "Uploaded",
+        uploaded: "Uploaded",
+        processing: "Processing",
+        processed: "Processed",
+        failed: "Failed",
+      } as any
+    )[x.processingStatus] ?? "Uploaded",
+  classification: docType(x.classification ?? x.documentType),
+  confidence: x.classificationConfidence ?? x.confidence ?? 0,
+  conversionStatus:
+    x.conversion?.status === "converted" || x.convertedRecordId
+      ? "Converted"
+      : "Not converted",
+  convertedRecordType: (
+    { invoice: "Invoice", bill: "Bill", transaction: "Transaction" } as any
+  )[
+    String(
+      x.conversion?.targetType ?? x.convertedRecordType ?? "",
+    ).toLowerCase()
+  ],
+  convertedRecordId: x.conversion?.targetId
+    ? String(x.conversion.targetId)
+    : x.convertedRecordId,
+  extracted:
+    x.extractedData?.ai?.fields ??
+    x.extractedData?.extracted?.fields ??
+    x.extractedData?.reviewedFields ??
+    x.extractedData ??
+    {},
+  rawText: x.extractedData?.ocr?.rawText ?? x.rawText ?? "",
+});
+const AppContext = createContext<AppContextValue | null>(null);
+export function AppProvider({ children }: { children: ReactNode }) {
+  const [data, setData] = useState<AppData>(emptyData);
+  const [role, setRoleState] = useState<Role>("Owner");
+  const [signedIn, setSignedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [loading, setLoading] = useState(false);
+  const toast = useCallback((input: ToastInput) => {
+    const toastId = uid("toast");
+    setToasts((p) => [...p, { ...input, id: toastId }]);
+    window.setTimeout(
+      () => setToasts((p) => p.filter((t) => t.id !== toastId)),
+      4200,
+    );
+  }, []);
+  const dismissToast = useCallback(
+    (toastId: string) => setToasts((p) => p.filter((t) => t.id !== toastId)),
+    [],
+  );
+  const signOut = useCallback(async () => {
+    try {
+      await authApi.logout();
+    } catch {}
+    setAccessToken(null);
+    setSignedIn(false);
+    setCurrentUser(null);
+    setData(emptyData());
+  }, []);
+  const setRole = useCallback(
+    (r: Role) => {
+      if (currentUser) {
+        toast({
+          title: "Role is managed by your account",
+          description: "Munshee uses the role returned by the backend.",
+          tone: "info",
+        });
+        return;
+      }
+      setRoleState(r);
+    },
+    [currentUser, toast],
+  );
+  const reload = useCallback(async () => {
+    if (!signedIn) return;
+    setLoading(true);
+    const get = async <T,>(
+      fn: () => Promise<any>,
+      fallback: T,
+    ): Promise<any> => {
+      try {
+        return await fn();
+      } catch {
+        return fallback;
+      }
+    };
+    const [
+      business,
+      accounts,
+      categories,
+      parties,
+      transactions,
+      invoices,
+      bills,
+      recurring,
+      documents,
+      inventory,
+      notifications,
+      team,
+      audit,
+      subscription,
+      rates,
+    ] = await Promise.all([
+      get(() => financeApi.business(), {}),
+      get(() => financeApi.accounts(), { accounts: [] }),
+      get(() => financeApi.categories(), { categories: [] }),
+      get(() => financeApi.parties(), { parties: [] }),
+      get(() => financeApi.transactions(), { transactions: [] }),
+      get(() => financeApi.invoices(), { invoices: [] }),
+      get(() => financeApi.bills(), { bills: [] }),
+      get(() => financeApi.recurring(), { recurringTransactions: [] }),
+      get(() => financeApi.documents(), { documents: [] }),
+      get(() => financeApi.inventory(), { items: [] }),
+      get(() => financeApi.notifications(), { notifications: [] }),
+      get(() => financeApi.team(), { users: [] }),
+      get(() => financeApi.auditLogs(), { logs: [] }),
+      get(() => financeApi.subscription(), {}),
+      get(() => financeApi.currencyRates(), { rates: [] }),
+    ]);
+    const b = business.business ?? business;
+    const invoiceRows = arr(invoices, ["invoices", "data"]);
+    const billRows = arr(bills, ["bills", "data"]);
+    const [invoiceWithPayments, billWithPayments] = await Promise.all([
+      Promise.all(
+        invoiceRows.map(async (x: any) => {
+          try {
+            const p = await financeApi.invoicePayments(id(x));
+            return { ...x, payments: arr(p, ["payments", "data"]) };
+          } catch {
+            return x;
+          }
+        }),
+      ),
+      Promise.all(
+        billRows.map(async (x: any) => {
+          try {
+            const p = await financeApi.billPayments(id(x));
+            return { ...x, payments: arr(p, ["payments", "data"]) };
+          } catch {
+            return x;
+          }
+        }),
+      ),
+    ]);
+    setData({
+      accounts: arr(accounts, ["accounts"]).map(accountMap),
+      categories: arr(categories, ["categories"]).map(categoryMap),
+      parties: arr(parties, ["parties"]).map(partyMap),
+      transactions: arr(transactions, ["transactions", "data"]).map(txMap),
+      invoices: invoiceWithPayments.map(invoiceMap),
+      bills: billWithPayments.map(billMap),
+      recurring: arr(recurring, [
+        "recurringTransactions",
+        "recurring",
+        "rules",
+        "data",
+      ]).map(recurringMap),
+      documents: arr(documents, ["documents", "data"]).map(documentMap),
+      inventory: arr(inventory, ["items", "inventory", "data"]).map(
+        (x: any) => ({
+          id: id(x),
+          sku: x.sku,
+          name: x.name,
+          description: x.description,
+          unit: x.unit ?? "unit",
+          quantity: Number(x.quantity ?? 0),
+          reorderLevel: Number(x.reorderLevel ?? 0),
+          unitCost: money(x.unitCost),
+          currency: x.currency ?? b.currency ?? "PKR",
+          status: x.isActive === false ? "Inactive" : "Active",
+          movements: [],
+        }),
+      ),
+      notifications: arr(notifications, ["notifications", "data"]).map(
+        (x: any) => ({
+          id: id(x),
+          title: x.title,
+          message: x.message,
+          type: x.type ?? "Information",
+          createdAt: date(x.createdAt),
+          readAt: x.readAt ? date(x.readAt) : undefined,
+          href: x.href,
+        }),
+      ),
+      team: arr(team, ["users", "data"]).map((x: any) => ({
+        id: id(x),
+        name: x.name,
+        email: x.email,
+        role: roleMap(x.role),
+        status: x.isActive === false ? "Inactive" : "Active",
+        createdAt: date(x.createdAt),
+        lastLoginAt: x.lastLoginAt ? date(x.lastLoginAt) : undefined,
+      })),
+      auditLogs: arr(audit, ["logs", "auditLogs", "data"]).map((x: any) => ({
+        id: id(x),
+        createdAt: date(x.createdAt),
+        user: x.user?.name ?? x.userId?.name ?? "User",
+        action: x.action,
+        method: x.method,
+        path: x.path,
+        statusCode: x.statusCode ?? 200,
+        resourceType: x.resourceType,
+        resourceId: x.resourceId,
+        ip: x.ip,
+        metadata: JSON.stringify(x.metadata ?? ""),
+      })),
+      currencyRates: arr(rates, ["rates", "currencyRates", "data"]).map(
+        (x: any) => ({
+          id: id(x),
+          baseCurrency: x.baseCurrency,
+          quoteCurrency: x.quoteCurrency,
+          rate: money(x.rate),
+          effectiveAt: date(x.effectiveAt),
+          source: x.source ?? "manual",
+        }),
+      ),
+      settings: {
+        name: b.name ?? "Munshee",
+        country: b.country ?? "",
+        currency: b.currency ?? "PKR",
+        timezone: b.timezone ?? "UTC",
+      },
+      subscription: (() => {
+        const s = subscription.subscription ?? subscription;
+        return {
+          plan: String(s.plan ?? "free").replace(/^./, (m: string) =>
+            m.toUpperCase(),
+          ) as any,
+          status: s.status ?? "Active",
+          periodStart: date(s.currentPeriodStart ?? s.periodStart),
+          periodEnd: date(s.currentPeriodEnd ?? s.periodEnd),
+          usersLimit: s.limits?.users ?? s.usersLimit ?? 1,
+          documentsLimit: s.limits?.documents ?? s.documentsLimit ?? 0,
+          usersUsed: s.usersUsed ?? 0,
+          documentsUsed: s.documentsUsed ?? 0,
+        };
+      })(),
+      emailVerified: !!(
+        currentUser?.emailVerified ?? currentUser?.isEmailVerified
+      ),
+      mfaEnabled: !!currentUser?.mfaEnabled,
+    });
+    setLoading(false);
+  }, [signedIn, currentUser]);
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setSignedIn(false);
+      setCurrentUser(null);
+      setData(emptyData());
+    });
+    let alive = true;
+    (async () => {
+      try {
+        const r = await apiClient.post("/auth/refresh");
+        const token = r.data?.data?.accessToken;
+        if (token && alive) {
+          setAccessToken(token);
+          const [profile, authProfile] = await Promise.all([
+            financeApi.business(),
+            financeApi.authTest(),
+          ]);
+          if (alive) {
+            setCurrentUser(authProfile?.user ?? null);
+            setRoleState(roleMap(authProfile?.user?.role));
+            setSignedIn(true);
+            setData((d) => ({
+              ...d,
+              settings: { ...d.settings, ...(profile.business ?? profile) },
+            }));
+            void reload();
+          }
+        }
+      } catch {
+        setSignedIn(false);
+      }
+    })();
+    return () => {
+      alive = false;
+      setUnauthorizedHandler(null);
+    };
+  }, []);
+  useEffect(() => {
+    if (signedIn) void reload();
+  }, [signedIn]);
+  const signIn = useCallback((r: Role = "Owner", user?: any) => {
+    setRoleState(r);
+    if (user) setCurrentUser(user);
+    setSignedIn(true);
+  }, []);
+  const run = useCallback(
+    async (fn: () => Promise<any>, success: string) => {
+      try {
+        await fn();
+        await reload();
+        toast({ title: success, tone: "success" });
+      } catch (e) {
+        toast({
+          title: "Request failed",
+          description: getApiErrorMessage(e),
+          tone: "error",
+        });
+      }
+    },
+    [reload, toast],
+  );
+  const addTransaction = useCallback(
+    async (x: CreateTransactionInput) => {
+      try {
+        const payload: any = {
+          type: x.type.toLowerCase(),
+          amount: String(x.amount),
+          transactionDate: new Date(x.date).toISOString(),
+          description: x.description,
+          reference: x.reference,
+          accountId: x.accountId,
+          ...(x.type === "Transfer"
+            ? { destinationAccountId: x.destinationAccountId }
+            : { categoryId: x.categoryId }),
+          source: x.source === "ai" ? "ai" : "manual",
+        };
+        const result = await financeApi.createTransaction(payload);
+        await reload();
+        toast({ title: "Transaction created", tone: "success" });
+        return txMap(result.transaction ?? result);
+      } catch (e) {
+        toast({
+          title: "Transaction failed",
+          description: getApiErrorMessage(e),
+          tone: "error",
+        });
+        throw e;
+      }
+    },
+    [reload, toast],
+  );
+  const voidTransaction = useCallback(
+    (id: string, reason: string) =>
+      void run(
+        () => financeApi.voidTransaction(id, reason),
+        "Transaction voided",
+      ),
+    [run],
+  );
+  const addAccount = useCallback(
+    (x: any) =>
+      void run(
+        () =>
+          financeApi.createAccount({
+            name: x.name,
+            type: String(x.type).toLowerCase(),
+            currency: x.currency,
+            openingBalance: String(x.openingBalance ?? "0"),
+            description: x.description,
+          }),
+        "Account created",
+      ),
+    [run],
+  );
+  const updateAccount = useCallback(
+    (id: string, x: any) =>
+      void run(
+        () =>
+          financeApi.updateAccount(id, {
+            name: x.name,
+            description: x.description,
+          }),
+        "Account updated",
+      ),
+    [run],
+  );
+  const toggleAccount = useCallback(
+    (id: string) => {
+      const a = data.accounts.find((x) => x.id === id);
+      if (a)
+        void run(
+          () => financeApi.accountStatus(id, a.status !== "Active"),
+          "Account status updated",
+        );
+    },
+    [data.accounts, run],
+  );
+  const addCategory = useCallback(
+    (x: any) =>
+      void run(
+        () =>
+          financeApi.createCategory({
+            name: x.name,
+            type: String(x.type).toLowerCase(),
+            description: x.description,
+          }),
+        "Category created",
+      ),
+    [run],
+  );
+  const updateCategory = useCallback(
+    (id: string, x: any) =>
+      void run(
+        () =>
+          financeApi.updateCategory(id, {
+            name: x.name,
+            description: x.description,
+          }),
+        "Category updated",
+      ),
+    [run],
+  );
+  const toggleCategory = useCallback(
+    (id: string) => {
+      const c = data.categories.find((x) => x.id === id);
+      if (c)
+        void run(
+          () => financeApi.categoryStatus(id, c.status !== "Active"),
+          "Category status updated",
+        );
+    },
+    [data.categories, run],
+  );
+  const addParty = useCallback(
+    (x: any) =>
+      void run(
+        () =>
+          financeApi.createParty({
+            name: x.name,
+            type:
+              x.type === "Both"
+                ? "customer_vendor"
+                : String(x.type).toLowerCase(),
+            email: x.email,
+            phone: x.phone,
+            companyName: x.company,
+            address: x.address,
+            taxNumber: x.taxNumber,
+            notes: x.notes,
+          }),
+        "Party created",
+      ),
+    [run],
+  );
+  const updateParty = useCallback(
+    (id: string, x: any) =>
+      void run(
+        () =>
+          financeApi.updateParty(id, {
+            name: x.name,
+            email: x.email,
+            phone: x.phone,
+            companyName: x.company,
+            address: x.address,
+            taxNumber: x.taxNumber,
+            notes: x.notes,
+          }),
+        "Party updated",
+      ),
+    [run],
+  );
+  const toggleParty = useCallback(
+    (id: string) => {
+      const p = data.parties.find((x) => x.id === id);
+      if (p)
+        void run(
+          () => financeApi.partyStatus(id, p.status !== "Active"),
+          "Party status updated",
+        );
+    },
+    [data.parties, run],
+  );
+  const addInvoice = useCallback(
+    async (x: InvoiceInput) => {
+      try {
+        const payload = {
+          customerId: x.partyId,
+          issueDate: new Date(x.issueDate).toISOString(),
+          dueDate: new Date(x.dueDate).toISOString(),
+          items: x.items.map((i) => ({
+            description: i.description,
+            quantity: String(i.quantity),
+            unitPrice: String(i.unitPrice),
+            categoryId: i.categoryId,
+          })),
+          discountRate: String(x.discountRate ?? "0"),
+          taxRate: String(x.taxRate ?? "0"),
+          notes: x.notes,
+          terms: x.terms,
+        };
+        const result = await financeApi.createInvoice(payload);
+        await reload();
+        toast({ title: "Invoice created", tone: "success" });
+        return invoiceMap(result.invoice ?? result);
+      } catch (e) {
+        toast({
+          title: "Invoice creation failed",
+          description: getApiErrorMessage(e),
+          tone: "error",
+        });
+        throw e;
+      }
+    },
+    [reload, toast],
+  );
+  const updateInvoice = useCallback(
+    (id: string, x: any) => {
+      const current = data.invoices.find((i) => i.id === id);
+      if (!current) return;
+      void run(
+        () =>
+          financeApi.updateInvoice(id, {
+            customerId: x.partyId ?? current.partyId,
+            issueDate: new Date(x.issueDate ?? current.issueDate).toISOString(),
+            dueDate: new Date(x.dueDate ?? current.dueDate).toISOString(),
+            items: (x.items ?? current.items).map((i: any) => ({
+              description: i.description,
+              quantity: String(i.quantity),
+              unitPrice: String(i.unitPrice),
+              categoryId: i.categoryId,
+            })),
+            discountRate: String(x.discountRate ?? current.discountRate),
+            taxRate: String(x.taxRate ?? current.taxRate),
+            notes: x.notes ?? current.notes,
+            terms: x.terms ?? current.terms,
+          }),
+        "Invoice updated",
+      );
+    },
+    [data.invoices, run],
+  );
+  const sendInvoice = useCallback(
+    (id: string) =>
+      void run(
+        () => financeApi.invoiceStatus(id, "sent"),
+        "Invoice marked as sent",
+      ),
+    [run],
+  );
+  const cancelInvoice = useCallback(
+    (id: string) =>
+      void run(
+        () => financeApi.invoiceStatus(id, "cancelled"),
+        "Invoice cancelled",
+      ),
+    [run],
+  );
+  const addInvoicePayment = useCallback(
+    (id: string, x: any) =>
+      void run(
+        () =>
+          financeApi.createInvoicePayment(id, {
+            accountId: x.accountId,
+            categoryId: x.categoryId,
+            amount: String(x.amount),
+            paymentDate: new Date(x.date).toISOString(),
+            reference: x.reference,
+            notes: x.notes,
+          }),
+        "Invoice payment recorded",
+      ),
+    [run],
+  );
+  const reverseInvoicePayment = useCallback(
+    (_id: string, pid: string) =>
+      void run(
+        () => financeApi.reverseInvoicePayment(pid),
+        "Invoice payment reversed",
+      ),
+    [run],
+  );
+  const addBill = useCallback(
+    async (x: BillInput) => {
+      try {
+        const result = await financeApi.createBill({
+          vendorId: x.partyId,
+          billDate: new Date(x.billDate).toISOString(),
+          dueDate: new Date(x.dueDate).toISOString(),
+          items: x.items.map((i) => ({
+            description: i.description,
+            quantity: String(i.quantity),
+            unitPrice: String(i.unitPrice),
+            categoryId: i.categoryId,
+          })),
+          discountRate: String(x.discountRate ?? "0"),
+          taxRate: String(x.taxRate ?? "0"),
+          notes: x.notes,
+          terms: x.terms,
+        });
+        await reload();
+        toast({ title: "Bill created", tone: "success" });
+        return billMap(result.bill ?? result);
+      } catch (e) {
+        toast({
+          title: "Bill creation failed",
+          description: getApiErrorMessage(e),
+          tone: "error",
+        });
+        throw e;
+      }
+    },
+    [reload, toast],
+  );
+  const updateBill = useCallback(
+    (id: string, x: any) => {
+      const current = data.bills.find((i) => i.id === id);
+      if (!current) return;
+      void run(
+        () =>
+          financeApi.updateBill(id, {
+            vendorId: x.partyId ?? current.partyId,
+            billDate: new Date(x.billDate ?? current.billDate).toISOString(),
+            dueDate: new Date(x.dueDate ?? current.dueDate).toISOString(),
+            items: (x.items ?? current.items).map((i: any) => ({
+              description: i.description,
+              quantity: String(i.quantity),
+              unitPrice: String(i.unitPrice),
+              categoryId: i.categoryId,
+            })),
+            discountRate: String(x.discountRate ?? current.discountRate),
+            taxRate: String(x.taxRate ?? current.taxRate),
+            notes: x.notes ?? current.notes,
+            terms: x.terms ?? current.terms,
+          }),
+        "Bill updated",
+      );
+    },
+    [data.bills, run],
+  );
+  const receiveBill = useCallback(
+    (id: string) =>
+      void run(
+        () => financeApi.billStatus(id, "received"),
+        "Bill marked as received",
+      ),
+    [run],
+  );
+  const cancelBill = useCallback(
+    (id: string) =>
+      void run(() => financeApi.billStatus(id, "cancelled"), "Bill cancelled"),
+    [run],
+  );
+  const addBillPayment = useCallback(
+    (id: string, x: any) =>
+      void run(
+        () =>
+          financeApi.createBillPayment(id, {
+            accountId: x.accountId,
+            categoryId: x.categoryId,
+            amount: String(x.amount),
+            paymentDate: new Date(x.date).toISOString(),
+            reference: x.reference,
+            notes: x.notes,
+          }),
+        "Bill payment recorded",
+      ),
+    [run],
+  );
+  const reverseBillPayment = useCallback(
+    (_id: string, pid: string) =>
+      void run(
+        () => financeApi.reverseBillPayment(pid),
+        "Bill payment reversed",
+      ),
+    [run],
+  );
+  const addRecurring = useCallback(
+    (x: any) =>
+      void run(
+        () =>
+          financeApi.createRecurring({
+            type: String(x.type).toLowerCase(),
+            amount: String(x.amount),
+            description: x.description,
+            accountId: x.accountId,
+            destinationAccountId: x.destinationAccountId,
+            categoryId: x.categoryId,
+            frequency: String(x.frequency).toLowerCase(),
+            intervalDays: Number(x.intervalDays) || undefined,
+            startDate: new Date(x.startDate).toISOString(),
+            endDate: x.endDate ? new Date(x.endDate).toISOString() : null,
+          }),
+        "Recurring rule created",
+      ),
+    [run],
+  );
+  const updateRecurring = useCallback(
+    (id: string, x: any) => {
+      const item = data.recurring.find((r) => r.id === id);
+      if (item)
+        void run(
+          () =>
+            financeApi.recurringStatus(
+              id,
+              Boolean(x.isActive ?? !item.isActive),
+            ),
+          "Recurring rule updated",
+        );
+    },
+    [data.recurring, run],
+  );
+  const executeRecurring = useCallback(
+    (id: string) =>
+      void run(
+        () => financeApi.executeRecurring(id),
+        "Recurring transaction executed",
+      ),
+    [run],
+  );
+  const addDocument = useCallback(
+    async (x: any, file?: File) => {
+      if (!file) throw new Error("Select a file to upload.");
+      try {
+        const initialized = await financeApi.initDocumentUpload({
+          originalFileName: file.name,
+          mimeType: file.type,
+          fileSize: file.size,
+          documentType:
+            (
+              {
+                Invoice: "invoice",
+                Bill: "bill",
+                Receipt: "receipt",
+                Expense: "expense_receipt",
+                Income: "income_receipt",
+                Statement: "statement",
+              } as any
+            )[x.type] ?? "other",
+        });
+        const doc = initialized.document;
+        const upload = initialized.upload;
+        const form = new FormData();
+        form.append("file", file);
+        form.append("api_key", upload.apiKey);
+        form.append("timestamp", String(upload.timestamp));
+        form.append("signature", upload.signature);
+        form.append("folder", upload.folder);
+        form.append("public_id", upload.publicId);
+        const cloud = await fetch(upload.uploadUrl, {
+          method: "POST",
+          body: form,
+        });
+        const cloudData = await cloud.json();
+        if (!cloud.ok)
+          throw new Error(
+            cloudData?.error?.message || "Cloudinary upload failed.",
+          );
+        await financeApi.completeDocumentUpload(id(doc), {
+          publicId: cloudData.public_id,
+          secureUrl: cloudData.secure_url,
+          resourceType: cloudData.resource_type,
+          format: cloudData.format,
+        });
+        await reload();
+        toast({
+          title: "Document uploaded",
+          description: "Your file is stored and ready for OCR processing.",
+          tone: "success",
+        });
+        return documentMap({
+          ...doc,
+          processingStatus: "uploaded",
+          cloudinary: { secureUrl: cloudData.secure_url },
+        });
+      } catch (e) {
+        toast({
+          title: "Document upload failed",
+          description: getApiErrorMessage(e),
+          tone: "error",
+        });
+        throw e;
+      }
+    },
+    [reload, toast],
+  );
+  const processDocument = useCallback(
+    (id: string) =>
+      void run(async () => {
+        await financeApi.processDocument(id);
+        try {
+          await financeApi.classifyDocument(id);
+        } catch {}
+        try {
+          await financeApi.extractDocumentAi(id);
+        } catch {}
+      }, "Document processed"),
+    [run],
+  );
+  const updateDocumentReview = useCallback(
+    (id: string, extracted: any) =>
+      void run(
+        () =>
+          financeApi.reviewDocument(id, {
+            ...data.documents.find((d) => d.id === id)?.extracted,
+            reviewedFields: extracted,
+          }),
+        "Document review saved",
+      ),
+    [run, data.documents],
+  );
+  const markDocumentConverted = useCallback(
+    (id: string, type: any, recordId: string) => {
+      void id;
+      void type;
+      void recordId;
+      toast({
+        title: "Use document conversion workflow",
+        description:
+          "Conversion requires the target record fields and is handled in the document review screen.",
+        tone: "info",
+      });
+    },
+    [toast],
+  );
+  const removeDocument = useCallback(
+    (id: string) =>
+      void run(() => financeApi.deleteDocument(id), "Document deleted"),
+    [run],
+  );
+  const addInventoryItem = useCallback(
+    (x: any) =>
+      void run(
+        () =>
+          financeApi.createInventory({
+            sku: x.sku,
+            name: x.name,
+            description: x.description,
+            unit: x.unit,
+            quantity: String(x.quantity ?? "0"),
+            reorderLevel: String(x.reorderLevel ?? "0"),
+            unitCost: String(x.unitCost ?? "0"),
+          }),
+        "Inventory item created",
+      ),
+    [run],
+  );
+  const updateInventoryItem = useCallback(
+    (_id: string, _x: any) =>
+      toast({
+        title: "Inventory item editing is not supported",
+        description:
+          "The backend currently supports create and stock adjustment only.",
+        tone: "info",
+      }),
+    [toast],
+  );
+  const adjustInventory = useCallback(
+    (id: string, x: any) =>
+      void run(
+        () =>
+          financeApi.adjustInventory(id, {
+            quantity: String(x.quantityDelta ?? x.quantity),
+            type: String(x.type ?? "adjustment").toLowerCase(),
+            unitCost: String(x.unitCost ?? "0"),
+            reference: x.reference,
+            notes: x.notes,
+          }),
+        "Stock adjusted",
+      ),
+    [run],
+  );
+  const markNotificationRead = useCallback(
+    (id: string) =>
+      void run(
+        () => financeApi.readNotification(id),
+        "Notification marked read",
+      ),
+    [run],
+  );
+  const addTeamMember = useCallback(
+    (x: any) =>
+      void run(
+        () =>
+          financeApi.createUser({
+            name: x.name,
+            email: x.email,
+            role: String(x.role).toLowerCase(),
+            password: x.password,
+          }),
+        "Team member created",
+      ),
+    [run],
+  );
+  const updateTeamMember = useCallback(
+    (id: string, x: any) =>
+      void run(
+        () =>
+          financeApi.updateUser(id, {
+            name: x.name,
+            role: String(x.role).toLowerCase(),
+          }),
+        "Team member updated",
+      ),
+    [run],
+  );
+  const toggleTeamMember = useCallback(
+    (id: string) => {
+      const x = data.team.find((t) => t.id === id);
+      if (x)
+        void run(
+          () => financeApi.userStatus(id, x.status !== "Active"),
+          "Team member status updated",
+        );
+    },
+    [data.team, run],
+  );
+  const updateSettings = useCallback(
+    (x: any) =>
+      void run(
+        () =>
+          financeApi.updateBusiness({
+            name: x.name,
+            country: x.country,
+            currency: x.currency,
+            timezone: x.timezone,
+          }),
+        "Business settings updated",
+      ),
+    [run],
+  );
+  const addCurrencyRate = useCallback(
+    (x: CurrencyRate) =>
+      void run(
+        () =>
+          financeApi.createCurrencyRate({
+            baseCurrency: x.baseCurrency,
+            quoteCurrency: x.quoteCurrency,
+            rate: String(x.rate),
+            effectiveAt: new Date(x.effectiveAt).toISOString(),
+            source: x.source,
+          }),
+        "Currency rate added",
+      ),
+    [run],
+  );
+  const setMfaEnabled = useCallback(
+    (enabled: boolean, code?: string) => {
+      if (!code) {
+        toast({ title: "Authenticator code required", tone: "error" });
+        return;
+      }
+      void (async () => {
+        try {
+          if (enabled) await authApi.enableMfa(code);
+          else await authApi.disableMfa(code);
+          setCurrentUser((u: any) => ({ ...u, mfaEnabled: enabled }));
+          setData((d) => ({ ...d, mfaEnabled: enabled }));
+          toast({
+            title: enabled ? "MFA enabled" : "MFA disabled",
+            tone: "success",
+          });
+        } catch (e) {
+          toast({
+            title: "MFA update failed",
+            description: getApiErrorMessage(e),
+            tone: "error",
+          });
+        }
+      })();
+    },
+    [toast],
+  );
+  const setEmailVerified = useCallback(
+    (enabled: boolean) => {
+      if (enabled)
+        void run(() => authApi.resendVerification(), "Verification email sent");
+      else toast({ title: "Verification required", tone: "info" });
+    },
+    [run, toast],
+  );
+  const changePlan = useCallback(
+    (plan: any) =>
+      void run(
+        () => financeApi.updateSubscription(String(plan).toLowerCase()),
+        "Subscription updated",
+      ),
+    [run],
+  );
+  const resetDemo = useCallback(
+    () =>
+      toast({
+        title: "Demo reset unavailable",
+        description:
+          "Munshee uses live server data; live records cannot be restored from the frontend.",
+        tone: "info",
+      }),
+    [toast],
+  );
+  const value = useMemo<AppContextValue>(
+    () => ({
+      data,
+      role,
+      setRole,
+      signedIn,
+      signIn,
+      signOut,
+      toast,
+      dismissToast,
+      toasts,
+      resetDemo,
+      addTransaction,
+      voidTransaction,
+      addAccount,
+      updateAccount,
+      toggleAccount,
+      addCategory,
+      updateCategory,
+      toggleCategory,
+      addParty,
+      updateParty,
+      toggleParty,
+      addInvoice,
+      updateInvoice,
+      sendInvoice,
+      cancelInvoice,
+      addInvoicePayment,
+      reverseInvoicePayment,
+      addBill,
+      updateBill,
+      receiveBill,
+      cancelBill,
+      addBillPayment,
+      reverseBillPayment,
+      addRecurring,
+      updateRecurring,
+      executeRecurring,
+      addDocument,
+      processDocument,
+      updateDocumentReview,
+      markDocumentConverted,
+      removeDocument,
+      addInventoryItem,
+      updateInventoryItem,
+      adjustInventory,
+      markNotificationRead,
+      addTeamMember,
+      updateTeamMember,
+      toggleTeamMember,
+      updateSettings,
+      addCurrencyRate,
+      setMfaEnabled,
+      setEmailVerified,
+      changePlan,
+      reload,
+      currentUser,
+    }),
+    [
+      data,
+      role,
+      setRole,
+      signedIn,
+      signIn,
+      signOut,
+      toast,
+      dismissToast,
+      toasts,
+      resetDemo,
+      addTransaction,
+      voidTransaction,
+      addAccount,
+      updateAccount,
+      toggleAccount,
+      addCategory,
+      updateCategory,
+      toggleCategory,
+      addParty,
+      updateParty,
+      toggleParty,
+      addInvoice,
+      updateInvoice,
+      sendInvoice,
+      cancelInvoice,
+      addInvoicePayment,
+      reverseInvoicePayment,
+      addBill,
+      updateBill,
+      receiveBill,
+      cancelBill,
+      addBillPayment,
+      reverseBillPayment,
+      addRecurring,
+      updateRecurring,
+      executeRecurring,
+      addDocument,
+      processDocument,
+      updateDocumentReview,
+      markDocumentConverted,
+      removeDocument,
+      addInventoryItem,
+      updateInventoryItem,
+      adjustInventory,
+      markNotificationRead,
+      addTeamMember,
+      updateTeamMember,
+      toggleTeamMember,
+      updateSettings,
+      addCurrencyRate,
+      setMfaEnabled,
+      setEmailVerified,
+      changePlan,
+      reload,
+      currentUser,
+    ],
+  );
+  return (
+    <AppContext.Provider value={value}>
+      {children}
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
+    </AppContext.Provider>
+  );
 }
-export function useApp(){const context=useContext(AppContext);if(!context)throw new Error('useApp must be used within AppProvider');return context}
+export function useApp() {
+  const context = useContext(AppContext);
+  if (!context) throw new Error("useApp must be used within AppProvider");
+  return context;
+}
 function ToastViewport({
   toasts,
   onDismiss,

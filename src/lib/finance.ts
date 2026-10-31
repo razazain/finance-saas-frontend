@@ -1,4 +1,4 @@
-import type { Account, AppData } from '@/types';
+import type { Account, AppData } from "@/types";
 
 /**
  * Accounts usable for posted transactions in the current backend contract.
@@ -6,8 +6,13 @@ import type { Account, AppData } from '@/types';
  * business currency. Keep that constraint visible in the UI until the backend
  * supports true multi-currency posting and revaluation.
  */
-export function getPostableAccounts(data: Pick<AppData, 'accounts' | 'settings'>): Account[] {
+export function getPostableAccounts(
+  data: Pick<AppData, "accounts" | "settings">,
+): Account[] {
   return data.accounts.filter(
-    (account) => account.status === 'Active' && !account.isSystem && account.currency === data.settings.currency,
+    (account) =>
+      account.status === "Active" &&
+      !account.isSystem &&
+      account.currency === data.settings.currency,
   );
 }

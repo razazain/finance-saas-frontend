@@ -1,18 +1,335 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { CalendarDays, Download, FileBarChart, Printer, Scale } from 'lucide-react';
-import { useApp } from '@/context/AppContext';
-import { downloadCsv, money } from '@/lib/utils';
-import { financeApi } from '@/lib/api/services';
-import { getApiErrorMessage } from '@/lib/api/client';
-import { Badge, Button, Card, Field, Input, Notice, PageHeader, StatCard, Tabs } from '@/components/ui';
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import {
+  CalendarDays,
+  Download,
+  FileBarChart,
+  Printer,
+  Scale,
+} from "lucide-react";
+import { useApp } from "@/context/AppContext";
+import { downloadCsv, money } from "@/lib/utils";
+import { financeApi } from "@/lib/api/services";
+import { getApiErrorMessage } from "@/lib/api/client";
+import {
+  Badge,
+  Button,
+  Card,
+  Field,
+  Input,
+  Notice,
+  PageHeader,
+  StatCard,
+  Tabs,
+} from "@/components/ui";
 
-const reportTabs=[{label:'Income & expense',value:'income-expense'},{label:'Cash flow',value:'cash-flow'},{label:'Category breakdown',value:'category'},{label:'Monthly summary',value:'monthly'},{label:'Account summary',value:'account'},{label:'Tax report',value:'tax'}];
-export default function ReportsPage(){
- const {data}=useApp();const [params,setParams]=useSearchParams();const [from,setFrom]=useState(()=>new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString());const [to,setTo]=useState(()=>new Date().toISOString());const [result,setResult]=useState<any>(null);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const view=params.get('view')||'income-expense';const setView=(v:string)=>setParams({view:v});
- const query=useMemo(()=>({from:new Date(from).toISOString(),to:new Date(to).toISOString()}),[from,to]);
- useEffect(()=>{let active=true;setBusy(true);setError('');const load=async()=>{switch(view){case'cash-flow':return financeApi.reportCashFlow(query);case'category':return financeApi.reportCategoryBreakdown(query);case'monthly':return financeApi.reportMonthlySummary(query);case'account':return financeApi.reportAccountSummary(query);case'tax':return financeApi.taxReport(query);default:return financeApi.reportIncomeExpense(query)}};load().then(r=>{if(active)setResult(r)}).catch(e=>{if(active){setResult(null);setError(getApiErrorMessage(e))}}).finally(()=>{if(active)setBusy(false)});return()=>{active=false}},[view,query]);
- const unwrapped=result?.data??result;const scalar=(...keys:string[])=>{for(const key of keys){const v=unwrapped?.[key];if(v!==undefined&&v!==null)return String(v)}return '0'};const rows:any[]=Array.isArray(unwrapped)?unwrapped:(Array.isArray(unwrapped?.categories)?unwrapped.categories:Array.isArray(unwrapped?.months)?unwrapped.months:Array.isArray(unwrapped?.accounts)?unwrapped.accounts:Array.isArray(unwrapped?.cashFlow)?unwrapped.cashFlow:[]);
- const exportRows=()=>{if(!rows.length)return [['Report','Value'],['Summary',String(unwrapped?.summary??JSON.stringify(unwrapped??{}))]];const keys=Array.from(new Set(rows.flatMap(r=>Object.keys(r))));return [keys,...rows.map(r=>keys.map(k=>typeof r[k]==='object'?JSON.stringify(r[k]):r[k]??''))]};
- return <div className="page-stack"><PageHeader title="Reports" description="Financial reports are fetched from the Munshee backend." actions={<><Button variant="secondary" icon={<Printer size={16}/>} onClick={()=>window.print()}>Print report</Button><Button icon={<Download size={16}/>} onClick={()=>downloadCsv(`munshee-${view}.csv`,exportRows())}>Export CSV</Button></>}/><Card className="report-filter-card"><div className="report-filter-title"><div><CalendarDays size={17}/><strong>Reporting period</strong></div><Badge tone="info">{data.settings.timezone}</Badge></div><div className="report-filter-fields"><Field label="From"><Input type="date" value={from.slice(0,10)} onChange={e=>setFrom(new Date(`${e.target.value}T00:00:00.000Z`).toISOString())}/></Field><Field label="To"><Input type="date" value={to.slice(0,10)} onChange={e=>setTo(new Date(`${e.target.value}T23:59:59.000Z`).toISOString())}/></Field><Button variant="secondary" onClick={()=>{setFrom(new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString());setTo(new Date().toISOString())}}>Current month</Button></div></Card><div className="report-tabs-panel"><Tabs active={view} onChange={setView} items={reportTabs}/></div><div className="report-intro"><div><h2>{reportTabs.find(t=>t.value===view)?.label||'Income & expense'}</h2><p>Server-generated data from {from.slice(0,10)} through {to.slice(0,10)}.</p></div><Badge tone="success">Backend report</Badge></div>{busy?<Card><p>Loading report…</p></Card>:error?<Notice tone="danger" title="Report could not be loaded">{error}</Notice>:<><div className="stats-grid three"><StatCard label="Income" value={money(scalar('income','totalIncome'),data.settings.currency,0)} detail="Returned by the report API" tone="green"/><StatCard label="Expenses" value={money(scalar('expense','expenses','totalExpense'),data.settings.currency,0)} detail="Returned by the report API" tone="amber"/><StatCard label="Net" value={money(scalar('net','netIncome'),data.settings.currency,0)} detail="Returned by the report API" tone="blue"/></div><Card><div className="card-heading"><div><h2>Report details</h2><p>{rows.length?`${rows.length} rows returned by the backend`:'Summary from the backend response'}</p></div>{view==='tax'&&<Scale size={19}/>}</div>{rows.length?<div className="table-scroll"><table className="data-table"><thead><tr>{Array.from(new Set(rows.flatMap(r=>Object.keys(r)))).map(key=><th key={key}>{key.replace(/([A-Z])/g,' $1').replace(/^./,s=>s.toUpperCase())}</th>)}</tr></thead><tbody>{rows.map((row,index)=><tr key={String(row._id??row.id??row.month??row.name??index)}>{Array.from(new Set(rows.flatMap(r=>Object.keys(r)))).map(key=><td key={key}>{typeof row[key]==='object'?JSON.stringify(row[key]):String(row[key]??'—')}</td>)}</tr>)}</tbody></table></div>:<><p>{String(unwrapped?.summary??unwrapped?.note??'The backend returned no detail rows for this period.')}</p><pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',fontSize:12}}>{JSON.stringify(unwrapped,null,2)}</pre></>}</Card>{view==='tax'&&<Notice tone="warning" title="Not a tax filing calculation">This is a transaction-based internal summary, not jurisdiction-specific tax advice or a government filing workflow.</Notice>}</>}</div>;
+const reportTabs = [
+  { label: "Income & expense", value: "income-expense" },
+  { label: "Cash flow", value: "cash-flow" },
+  { label: "Category breakdown", value: "category" },
+  { label: "Monthly summary", value: "monthly" },
+  { label: "Account summary", value: "account" },
+  { label: "Tax report", value: "tax" },
+];
+export default function ReportsPage() {
+  const { data } = useApp();
+  const [params, setParams] = useSearchParams();
+  const [from, setFrom] = useState(() =>
+    new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString(),
+  );
+  const [to, setTo] = useState(() => new Date().toISOString());
+  const [result, setResult] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const view = params.get("view") || "income-expense";
+  const setView = (v: string) => setParams({ view: v });
+  const query = useMemo(
+    () => ({
+      from: new Date(from).toISOString(),
+      to: new Date(to).toISOString(),
+    }),
+    [from, to],
+  );
+  useEffect(() => {
+    let active = true;
+    setBusy(true);
+    setError("");
+    const load = async () => {
+      switch (view) {
+        case "cash-flow":
+          return financeApi.reportCashFlow(query);
+        case "category":
+          return financeApi.reportCategoryBreakdown(query);
+        case "monthly":
+          return financeApi.reportMonthlySummary(query);
+        case "account":
+          return financeApi.reportAccountSummary(query);
+        case "tax":
+          return financeApi.taxReport(query);
+        default:
+          return financeApi.reportIncomeExpense(query);
+      }
+    };
+    load()
+      .then((r) => {
+        if (active) setResult(r);
+      })
+      .catch((e) => {
+        if (active) {
+          setResult(null);
+          setError(getApiErrorMessage(e));
+        }
+      })
+      .finally(() => {
+        if (active) setBusy(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [view, query]);
+  const unwrapped = result?.data ?? result;
+  const scalar = (...keys: string[]) => {
+    for (const key of keys) {
+      const v = unwrapped?.[key];
+      if (v !== undefined && v !== null) return String(v);
+    }
+    return "0";
+  };
+  const rows: any[] = Array.isArray(unwrapped)
+    ? unwrapped
+    : Array.isArray(unwrapped?.categories)
+      ? unwrapped.categories
+      : Array.isArray(unwrapped?.months)
+        ? unwrapped.months
+        : Array.isArray(unwrapped?.accounts)
+          ? unwrapped.accounts
+          : Array.isArray(unwrapped?.cashFlow)
+            ? unwrapped.cashFlow
+            : [];
+  const exportRows = () => {
+    if (!rows.length)
+      return [
+        ["Report", "Value"],
+        [
+          "Summary",
+          String(unwrapped?.summary ?? JSON.stringify(unwrapped ?? {})),
+        ],
+      ];
+    const keys = Array.from(new Set(rows.flatMap((r) => Object.keys(r))));
+    return [
+      keys,
+      ...rows.map((r) =>
+        keys.map((k) =>
+          typeof r[k] === "object" ? JSON.stringify(r[k]) : (r[k] ?? ""),
+        ),
+      ),
+    ];
+  };
+  return (
+    <div className="page-stack">
+      <PageHeader
+        title="Reports"
+        description="Financial reports are fetched from the Munshee backend."
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              icon={<Printer size={16} />}
+              onClick={() => window.print()}
+            >
+              Print report
+            </Button>
+            <Button
+              icon={<Download size={16} />}
+              onClick={() => downloadCsv(`munshee-${view}.csv`, exportRows())}
+            >
+              Export CSV
+            </Button>
+          </>
+        }
+      />
+      <Card className="report-filter-card">
+        <div className="report-filter-title">
+          <div>
+            <CalendarDays size={17} />
+            <strong>Reporting period</strong>
+          </div>
+          <Badge tone="info">{data.settings.timezone}</Badge>
+        </div>
+        <div className="report-filter-fields">
+          <Field label="From">
+            <Input
+              type="date"
+              value={from.slice(0, 10)}
+              onChange={(e) =>
+                setFrom(
+                  new Date(`${e.target.value}T00:00:00.000Z`).toISOString(),
+                )
+              }
+            />
+          </Field>
+          <Field label="To">
+            <Input
+              type="date"
+              value={to.slice(0, 10)}
+              onChange={(e) =>
+                setTo(new Date(`${e.target.value}T23:59:59.000Z`).toISOString())
+              }
+            />
+          </Field>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setFrom(
+                new Date(
+                  new Date().getFullYear(),
+                  new Date().getMonth(),
+                  1,
+                ).toISOString(),
+              );
+              setTo(new Date().toISOString());
+            }}
+          >
+            Current month
+          </Button>
+        </div>
+      </Card>
+      <div className="report-tabs-panel">
+        <Tabs active={view} onChange={setView} items={reportTabs} />
+      </div>
+      <div className="report-intro">
+        <div>
+          <h2>
+            {reportTabs.find((t) => t.value === view)?.label ||
+              "Income & expense"}
+          </h2>
+          <p>
+            Server-generated data from {from.slice(0, 10)} through{" "}
+            {to.slice(0, 10)}.
+          </p>
+        </div>
+        <Badge tone="success">Backend report</Badge>
+      </div>
+      {busy ? (
+        <Card>
+          <p>Loading report…</p>
+        </Card>
+      ) : error ? (
+        <Notice tone="danger" title="Report could not be loaded">
+          {error}
+        </Notice>
+      ) : (
+        <>
+          <div className="stats-grid three">
+            <StatCard
+              label="Income"
+              value={money(
+                scalar("income", "totalIncome"),
+                data.settings.currency,
+                0,
+              )}
+              detail="Returned by the report API"
+              tone="green"
+            />
+            <StatCard
+              label="Expenses"
+              value={money(
+                scalar("expense", "expenses", "totalExpense"),
+                data.settings.currency,
+                0,
+              )}
+              detail="Returned by the report API"
+              tone="amber"
+            />
+            <StatCard
+              label="Net"
+              value={money(
+                scalar("net", "netIncome"),
+                data.settings.currency,
+                0,
+              )}
+              detail="Returned by the report API"
+              tone="blue"
+            />
+          </div>
+          <Card>
+            <div className="card-heading">
+              <div>
+                <h2>Report details</h2>
+                <p>
+                  {rows.length
+                    ? `${rows.length} rows returned by the backend`
+                    : "Summary from the backend response"}
+                </p>
+              </div>
+              {view === "tax" && <Scale size={19} />}
+            </div>
+            {rows.length ? (
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      {Array.from(
+                        new Set(rows.flatMap((r) => Object.keys(r))),
+                      ).map((key) => (
+                        <th key={key}>
+                          {key
+                            .replace(/([A-Z])/g, " $1")
+                            .replace(/^./, (s) => s.toUpperCase())}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, index) => (
+                      <tr
+                        key={String(
+                          row._id ?? row.id ?? row.month ?? row.name ?? index,
+                        )}
+                      >
+                        {Array.from(
+                          new Set(rows.flatMap((r) => Object.keys(r))),
+                        ).map((key) => (
+                          <td key={key}>
+                            {typeof row[key] === "object"
+                              ? JSON.stringify(row[key])
+                              : String(row[key] ?? "—")}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <>
+                <p>
+                  {String(
+                    unwrapped?.summary ??
+                      unwrapped?.note ??
+                      "The backend returned no detail rows for this period.",
+                  )}
+                </p>
+                <pre
+                  style={{
+                    whiteSpace: "pre-wrap",
+                    overflowWrap: "anywhere",
+                    fontSize: 12,
+                  }}
+                >
+                  {JSON.stringify(unwrapped, null, 2)}
+                </pre>
+              </>
+            )}
+          </Card>
+          {view === "tax" && (
+            <Notice tone="warning" title="Not a tax filing calculation">
+              This is a transaction-based internal summary, not
+              jurisdiction-specific tax advice or a government filing workflow.
+            </Notice>
+          )}
+        </>
+      )}
+    </div>
+  );
 }

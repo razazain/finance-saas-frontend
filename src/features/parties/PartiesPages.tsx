@@ -1,30 +1,622 @@
-import type { ReactNode } from 'react';
-import type { FormEvent } from 'react';
-import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { createColumnHelper } from '@tanstack/react-table';
-import { ArrowRight, Building2, Edit3, Mail, MapPin, Plus, Phone, Users, Wallet } from 'lucide-react';
-import { useApp } from '@/context/AppContext';
-import { formatDate, money } from '@/lib/utils';
-import type { Party, PartyType } from '@/types';
-import { Badge, Button, Card, DataTable, Dialog, Field, Input, PageHeader, Select, StatCard, Tabs, Textarea, PermissionNotice } from '@/components/ui';
+import type { ReactNode } from "react";
+import type { FormEvent } from "react";
+import { useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { createColumnHelper } from "@tanstack/react-table";
+import {
+  ArrowRight,
+  Building2,
+  Edit3,
+  Mail,
+  MapPin,
+  Plus,
+  Phone,
+  Users,
+  Wallet,
+} from "lucide-react";
+import { useApp } from "@/context/AppContext";
+import { formatDate, money } from "@/lib/utils";
+import type { Party, PartyType } from "@/types";
+import {
+  Badge,
+  Button,
+  Card,
+  DataTable,
+  Dialog,
+  Field,
+  Input,
+  PageHeader,
+  Select,
+  StatCard,
+  Tabs,
+  Textarea,
+  PermissionNotice,
+} from "@/components/ui";
 
-const helper=createColumnHelper<Party>();
-export function PartiesPage({kind}:{kind:'Customer'|'Vendor'}){
-  const {data,role,addParty,updateParty,toggleParty,toast}=useApp();const navigate=useNavigate();const [search,setSearch]=useState('');const [tab,setTab]=useState('Active');const [open,setOpen]=useState(false);const [editing,setEditing]=useState<Party|null>(null);const [form,setForm]=useState({name:'',company:'',email:'',phone:'',address:'',taxNumber:'',notes:'',type:kind as PartyType});const [error,setError]=useState('');const canManage=role==='Owner'||role==='Admin';
-  const filtered=useMemo(()=>data.parties.filter(p=>(p.type===kind||p.type==='Both')&&(tab==='All'||p.status===tab)&&`${p.name} ${p.company||''} ${p.email||''} ${p.phone||''}`.toLowerCase().includes(search.toLowerCase())),[data.parties,kind,tab,search]);
-  const outstanding=(partyId:string)=>kind==='Customer'?data.invoices.filter(i=>i.partyId===partyId&&i.status!=='Cancelled').reduce((s,i)=>s+Number(i.balance),0):data.bills.filter(b=>b.partyId===partyId&&b.status!=='Cancelled').reduce((s,b)=>s+Number(b.balance),0);
-  const startCreate=()=>{setEditing(null);setForm({name:'',company:'',email:'',phone:'',address:'',taxNumber:'',notes:'',type:kind});setError('');setOpen(true);};
-  const startEdit=(p:Party)=>{setEditing(p);setForm({name:p.name,company:p.company||'',email:p.email||'',phone:p.phone||'',address:p.address||'',taxNumber:p.taxNumber||'',notes:p.notes||'',type:p.type});setError('');setOpen(true);};
-  const save=(e:FormEvent)=>{e.preventDefault();if(!form.name.trim()){setError('Name is required.');return;}const payload={...form,name:form.name.trim(),company:form.company.trim(),email:form.email.trim(),phone:form.phone.trim(),address:form.address.trim(),taxNumber:form.taxNumber.trim(),notes:form.notes.trim()};if(editing){updateParty(editing.id,payload);toast({title:`${kind} updated`,tone:'success'});}else{addParty(payload);toast({title:`${kind} created`,tone:'success'});}setOpen(false);};
-  const columns=[helper.accessor('name',{header:kind,cell:i=><div className="table-primary-cell"><strong>{i.getValue()}</strong><small>{i.row.original.company||'Individual / business contact'}</small></div>}),helper.accessor('email',{header:'Contact',cell:i=><div className="table-primary-cell"><span>{i.getValue()||'No email'}</span><small>{i.row.original.phone||'No phone'}</small></div>}),helper.display({id:'kind',header:'Relationship',cell:i=><Badge tone={i.row.original.type==='Both'?'info':'neutral'}>{i.row.original.type==='Both'?'Customer & Vendor':i.row.original.type}</Badge>}),helper.display({id:'outstanding',header:kind==='Customer'?'Receivable balance':'Payable balance',cell:i=><strong className={outstanding(i.row.original.id)>0?'amount-text':''}>{money(outstanding(i.row.original.id),data.settings.currency)}</strong>}),helper.accessor('status',{header:'Status',cell:i=><Badge tone={i.getValue()==='Active'?'success':'neutral'}>{i.getValue()}</Badge>}),helper.display({id:'actions',header:'',cell:i=><div className="table-actions" onClick={e=>e.stopPropagation()}>{canManage&&<Button size="sm" variant="ghost" icon={<Edit3 size={14}/>} onClick={()=>startEdit(i.row.original)}>Edit</Button>}<Button size="sm" variant="ghost" onClick={()=>navigate(`/parties/${i.row.original.id}`)}>Details <ArrowRight size={14}/></Button></div>})];
-  const totalOutstanding=filtered.reduce((s,p)=>s+outstanding(p.id),0);
-  return <div className="page-stack"><PageHeader title={kind==='Customer'?'Customers':'Vendors'} description={kind==='Customer'?'Manage customers, invoices, and receivable balances.':'Manage suppliers, bills, and payable balances.'} actions={canManage?<Button icon={<Plus size={16}/>} onClick={startCreate}>New {kind.toLowerCase()}</Button>:undefined}/><div className="stats-grid three"><StatCard label={`Active ${kind.toLowerCase()}s`} value={String(data.parties.filter(p=>(p.type===kind||p.type==='Both')&&p.status==='Active').length)} detail="Business contacts" icon={<Users size={17}/>} tone="blue"/><StatCard label={kind==='Customer'?'Outstanding receivables':'Outstanding payables'} value={money(data.parties.filter(p=>p.type===kind||p.type==='Both').reduce((s,p)=>s+outstanding(p.id),0),data.settings.currency,0)} detail="Across open records" icon={<Wallet size={17}/>} tone={kind==='Customer'?'green':'amber'}/><StatCard label="With an email address" value={String(data.parties.filter(p=>(p.type===kind||p.type==='Both')&&p.email).length)} detail="Ready for email delivery" icon={<Mail size={17}/>} tone="neutral"/></div><Card className="list-card"><div className="list-toolbar"><Tabs active={tab} onChange={setTab} items={[{label:'Active',value:'Active'},{label:'Inactive',value:'Inactive'},{label:'All',value:'All'}]}/><div className="toolbar-search"><Input value={search} onChange={e=>setSearch(e.target.value)} placeholder={`Search ${kind.toLowerCase()}s…`}/></div></div><DataTable columns={columns} data={filtered} onRowClick={p=>navigate(`/parties/${p.id}`)} rowId={p=>p.id} emptyTitle={`No ${kind.toLowerCase()}s found`} emptyDescription={`Add your first ${kind.toLowerCase()} to keep contact and financial history in one place.`}/></Card>{!canManage&&<PermissionNotice role={role} action={`create or edit ${kind.toLowerCase()}s`}/>}<Dialog open={open} onOpenChange={setOpen} title={editing?`Edit ${kind.toLowerCase()}`:`Create ${kind.toLowerCase()}`} description="Keep contact information up to date for invoices and bills." size="lg" footer={<><Button variant="secondary" onClick={()=>setOpen(false)}>Cancel</Button><Button onClick={()=>document.getElementById('party-submit')?.click()}>{editing?'Save changes':`Create ${kind.toLowerCase()}`}</Button></>}><form className="form-stack" onSubmit={save}><div className="form-grid two"><Field label="Name" required error={error}><Input autoFocus value={form.name} onChange={e=>{setForm({...form,name:e.target.value});setError('');}} placeholder="Contact or business name"/></Field><Field label="Company"><Input value={form.company} onChange={e=>setForm({...form,company:e.target.value})} placeholder="Company name"/></Field><Field label="Email"><Input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="accounts@company.com"/></Field><Field label="Phone"><Input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="+92…"/></Field><Field label="Relationship"><Select value={form.type} onChange={e=>setForm({...form,type:e.target.value as PartyType})}><option>Customer</option><option>Vendor</option><option>Both</option></Select></Field><Field label="Tax number"><Input value={form.taxNumber} onChange={e=>setForm({...form,taxNumber:e.target.value})} placeholder="Optional"/></Field></div><Field label="Address"><Textarea rows={2} value={form.address} onChange={e=>setForm({...form,address:e.target.value})} placeholder="Business address"/></Field><Field label="Notes"><Textarea rows={2} value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Optional internal notes"/></Field><button id="party-submit" className="visually-hidden" type="submit">Submit</button></form></Dialog></div>;
+const helper = createColumnHelper<Party>();
+export function PartiesPage({ kind }: { kind: "Customer" | "Vendor" }) {
+  const { data, role, addParty, updateParty, toggleParty, toast } = useApp();
+  const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState("Active");
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Party | null>(null);
+  const [form, setForm] = useState({
+    name: "",
+    company: "",
+    email: "",
+    phone: "",
+    address: "",
+    taxNumber: "",
+    notes: "",
+    type: kind as PartyType,
+  });
+  const [error, setError] = useState("");
+  const canManage = role === "Owner" || role === "Admin";
+  const filtered = useMemo(
+    () =>
+      data.parties.filter(
+        (p) =>
+          (p.type === kind || p.type === "Both") &&
+          (tab === "All" || p.status === tab) &&
+          `${p.name} ${p.company || ""} ${p.email || ""} ${p.phone || ""}`
+            .toLowerCase()
+            .includes(search.toLowerCase()),
+      ),
+    [data.parties, kind, tab, search],
+  );
+  const outstanding = (partyId: string) =>
+    kind === "Customer"
+      ? data.invoices
+          .filter((i) => i.partyId === partyId && i.status !== "Cancelled")
+          .reduce((s, i) => s + Number(i.balance), 0)
+      : data.bills
+          .filter((b) => b.partyId === partyId && b.status !== "Cancelled")
+          .reduce((s, b) => s + Number(b.balance), 0);
+  const startCreate = () => {
+    setEditing(null);
+    setForm({
+      name: "",
+      company: "",
+      email: "",
+      phone: "",
+      address: "",
+      taxNumber: "",
+      notes: "",
+      type: kind,
+    });
+    setError("");
+    setOpen(true);
+  };
+  const startEdit = (p: Party) => {
+    setEditing(p);
+    setForm({
+      name: p.name,
+      company: p.company || "",
+      email: p.email || "",
+      phone: p.phone || "",
+      address: p.address || "",
+      taxNumber: p.taxNumber || "",
+      notes: p.notes || "",
+      type: p.type,
+    });
+    setError("");
+    setOpen(true);
+  };
+  const save = (e: FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      setError("Name is required.");
+      return;
+    }
+    const payload = {
+      ...form,
+      name: form.name.trim(),
+      company: form.company.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      address: form.address.trim(),
+      taxNumber: form.taxNumber.trim(),
+      notes: form.notes.trim(),
+    };
+    if (editing) {
+      updateParty(editing.id, payload);
+      toast({ title: `${kind} updated`, tone: "success" });
+    } else {
+      addParty(payload);
+      toast({ title: `${kind} created`, tone: "success" });
+    }
+    setOpen(false);
+  };
+  const columns = [
+    helper.accessor("name", {
+      header: kind,
+      cell: (i) => (
+        <div className="table-primary-cell">
+          <strong>{i.getValue()}</strong>
+          <small>
+            {i.row.original.company || "Individual / business contact"}
+          </small>
+        </div>
+      ),
+    }),
+    helper.accessor("email", {
+      header: "Contact",
+      cell: (i) => (
+        <div className="table-primary-cell">
+          <span>{i.getValue() || "No email"}</span>
+          <small>{i.row.original.phone || "No phone"}</small>
+        </div>
+      ),
+    }),
+    helper.display({
+      id: "kind",
+      header: "Relationship",
+      cell: (i) => (
+        <Badge tone={i.row.original.type === "Both" ? "info" : "neutral"}>
+          {i.row.original.type === "Both"
+            ? "Customer & Vendor"
+            : i.row.original.type}
+        </Badge>
+      ),
+    }),
+    helper.display({
+      id: "outstanding",
+      header: kind === "Customer" ? "Receivable balance" : "Payable balance",
+      cell: (i) => (
+        <strong
+          className={outstanding(i.row.original.id) > 0 ? "amount-text" : ""}
+        >
+          {money(outstanding(i.row.original.id), data.settings.currency)}
+        </strong>
+      ),
+    }),
+    helper.accessor("status", {
+      header: "Status",
+      cell: (i) => (
+        <Badge tone={i.getValue() === "Active" ? "success" : "neutral"}>
+          {i.getValue()}
+        </Badge>
+      ),
+    }),
+    helper.display({
+      id: "actions",
+      header: "",
+      cell: (i) => (
+        <div className="table-actions" onClick={(e) => e.stopPropagation()}>
+          {canManage && (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<Edit3 size={14} />}
+              onClick={() => startEdit(i.row.original)}
+            >
+              Edit
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => navigate(`/parties/${i.row.original.id}`)}
+          >
+            Details <ArrowRight size={14} />
+          </Button>
+        </div>
+      ),
+    }),
+  ];
+  const totalOutstanding = filtered.reduce((s, p) => s + outstanding(p.id), 0);
+  return (
+    <div className="page-stack">
+      <PageHeader
+        title={kind === "Customer" ? "Customers" : "Vendors"}
+        description={
+          kind === "Customer"
+            ? "Manage customers, invoices, and receivable balances."
+            : "Manage suppliers, bills, and payable balances."
+        }
+        actions={
+          canManage ? (
+            <Button icon={<Plus size={16} />} onClick={startCreate}>
+              New {kind.toLowerCase()}
+            </Button>
+          ) : undefined
+        }
+      />
+      <div className="stats-grid three">
+        <StatCard
+          label={`Active ${kind.toLowerCase()}s`}
+          value={String(
+            data.parties.filter(
+              (p) =>
+                (p.type === kind || p.type === "Both") && p.status === "Active",
+            ).length,
+          )}
+          detail="Business contacts"
+          icon={<Users size={17} />}
+          tone="blue"
+        />
+        <StatCard
+          label={
+            kind === "Customer"
+              ? "Outstanding receivables"
+              : "Outstanding payables"
+          }
+          value={money(
+            data.parties
+              .filter((p) => p.type === kind || p.type === "Both")
+              .reduce((s, p) => s + outstanding(p.id), 0),
+            data.settings.currency,
+            0,
+          )}
+          detail="Across open records"
+          icon={<Wallet size={17} />}
+          tone={kind === "Customer" ? "green" : "amber"}
+        />
+        <StatCard
+          label="With an email address"
+          value={String(
+            data.parties.filter(
+              (p) => (p.type === kind || p.type === "Both") && p.email,
+            ).length,
+          )}
+          detail="Ready for email delivery"
+          icon={<Mail size={17} />}
+          tone="neutral"
+        />
+      </div>
+      <Card className="list-card">
+        <div className="list-toolbar">
+          <Tabs
+            active={tab}
+            onChange={setTab}
+            items={[
+              { label: "Active", value: "Active" },
+              { label: "Inactive", value: "Inactive" },
+              { label: "All", value: "All" },
+            ]}
+          />
+          <div className="toolbar-search">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={`Search ${kind.toLowerCase()}s…`}
+            />
+          </div>
+        </div>
+        <DataTable
+          columns={columns}
+          data={filtered}
+          onRowClick={(p) => navigate(`/parties/${p.id}`)}
+          rowId={(p) => p.id}
+          emptyTitle={`No ${kind.toLowerCase()}s found`}
+          emptyDescription={`Add your first ${kind.toLowerCase()} to keep contact and financial history in one place.`}
+        />
+      </Card>
+      {!canManage && (
+        <PermissionNotice
+          role={role}
+          action={`create or edit ${kind.toLowerCase()}s`}
+        />
+      )}
+      <Dialog
+        open={open}
+        onOpenChange={setOpen}
+        title={
+          editing
+            ? `Edit ${kind.toLowerCase()}`
+            : `Create ${kind.toLowerCase()}`
+        }
+        description="Keep contact information up to date for invoices and bills."
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => document.getElementById("party-submit")?.click()}
+            >
+              {editing ? "Save changes" : `Create ${kind.toLowerCase()}`}
+            </Button>
+          </>
+        }
+      >
+        <form className="form-stack" onSubmit={save}>
+          <div className="form-grid two">
+            <Field label="Name" required error={error}>
+              <Input
+                autoFocus
+                value={form.name}
+                onChange={(e) => {
+                  setForm({ ...form, name: e.target.value });
+                  setError("");
+                }}
+                placeholder="Contact or business name"
+              />
+            </Field>
+            <Field label="Company">
+              <Input
+                value={form.company}
+                onChange={(e) => setForm({ ...form, company: e.target.value })}
+                placeholder="Company name"
+              />
+            </Field>
+            <Field label="Email">
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="accounts@company.com"
+              />
+            </Field>
+            <Field label="Phone">
+              <Input
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                placeholder="+92…"
+              />
+            </Field>
+            <Field label="Relationship">
+              <Select
+                value={form.type}
+                onChange={(e) =>
+                  setForm({ ...form, type: e.target.value as PartyType })
+                }
+              >
+                <option>Customer</option>
+                <option>Vendor</option>
+                <option>Both</option>
+              </Select>
+            </Field>
+            <Field label="Tax number">
+              <Input
+                value={form.taxNumber}
+                onChange={(e) =>
+                  setForm({ ...form, taxNumber: e.target.value })
+                }
+                placeholder="Optional"
+              />
+            </Field>
+          </div>
+          <Field label="Address">
+            <Textarea
+              rows={2}
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              placeholder="Business address"
+            />
+          </Field>
+          <Field label="Notes">
+            <Textarea
+              rows={2}
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              placeholder="Optional internal notes"
+            />
+          </Field>
+          <button id="party-submit" className="visually-hidden" type="submit">
+            Submit
+          </button>
+        </form>
+      </Dialog>
+    </div>
+  );
 }
 
-export function PartyDetailPage(){
-  const {id}=useParams();const {data}=useApp();const navigate=useNavigate();const party=data.parties.find(p=>p.id===id);if(!party)return <div className="page-stack"><PageHeader title="Contact not found" description="This contact is not available in your workspace." back={<Link className="back-link" to="/customers">← Back to contacts</Link>}/></div>;
-  const isCustomer=party.type==='Customer'||party.type==='Both';const isVendor=party.type==='Vendor'||party.type==='Both';const invoices=data.invoices.filter(i=>i.partyId===party.id);const bills=data.bills.filter(b=>b.partyId===party.id);const openBalance=(isCustomer?invoices.reduce((s,i)=>s+Number(i.balance),0):0)+(isVendor?bills.reduce((s,b)=>s+Number(b.balance),0):0);
-  return <div className="page-stack"><PageHeader title={party.name} description={`${party.company||party.type} · ${party.type}`} back={<Link className="back-link" to={isCustomer?'/customers':'/vendors'}>← Back to contacts</Link>} actions={<>{isCustomer&&<Button variant="secondary" onClick={()=>navigate(`/invoices/new?partyId=${party.id}`)}>Create invoice</Button>}{isVendor&&<Button onClick={()=>navigate(`/bills/new?partyId=${party.id}`)}>Create bill</Button>}</>}/><div className="stats-grid three"><StatCard label="Open balance" value={money(openBalance,data.settings.currency,0)} detail={party.type==='Both'?'Across receivables and payables':isCustomer?'Open receivables':'Open payables'} icon={<Wallet size={17}/>} tone="blue"/><StatCard label="Invoices" value={String(invoices.length)} detail={`${invoices.filter(i=>i.status==='Paid').length} paid`} icon={<ArrowRight size={17}/>} tone="green"/><StatCard label="Bills" value={String(bills.length)} detail={`${bills.filter(b=>b.status==='Paid').length} paid`} icon={<Building2 size={17}/>} tone="amber"/></div><div className="detail-grid"><Card><div className="card-heading"><div><h2>Contact information</h2><p>Customer and supplier details</p></div><Badge tone={party.status==='Active'?'success':'neutral'}>{party.status}</Badge></div><div className="contact-detail-list"><DetailLine icon={<Building2 size={16}/>} label="Company" value={party.company||'—'}/><DetailLine icon={<Mail size={16}/>} label="Email" value={party.email||'No email on file'}/><DetailLine icon={<Phone size={16}/>} label="Phone" value={party.phone||'No phone on file'}/><DetailLine icon={<MapPin size={16}/>} label="Address" value={party.address||'No address on file'}/><DetailLine icon={<Building2 size={16}/>} label="Tax number" value={party.taxNumber||'—'}/></div>{party.notes&&<div className="notes-panel"><strong>Notes</strong><p>{party.notes}</p></div>}<Button variant="secondary" onClick={()=>navigate(`/ledger/${party.id}`)}>View financial ledger <ArrowRight size={15}/></Button></Card><Card><div className="card-heading"><div><h2>Recent financial records</h2><p>Invoices and bills linked to this contact</p></div></div>{invoices.length===0&&bills.length===0?<div className="muted-panel-text">No invoices or bills linked to this contact yet.</div>:<div className="record-list">{invoices.map(item=><button key={item.id} className="record-list-row" onClick={()=>navigate(`/invoices/${item.id}`)}><span className="record-icon invoice"><ArrowRight size={16}/></span><span className="record-info"><strong>{item.number}</strong><small>Invoice · Due {formatDate(item.dueDate)}</small></span><span className="record-value"><strong>{money(item.total,data.settings.currency)}</strong><small>{item.status}</small></span></button>)}{bills.map(item=><button key={item.id} className="record-list-row" onClick={()=>navigate(`/bills/${item.id}`)}><span className="record-icon bill"><ArrowRight size={16}/></span><span className="record-info"><strong>{item.number}</strong><small>Bill · Due {formatDate(item.dueDate)}</small></span><span className="record-value"><strong>{money(item.total,data.settings.currency)}</strong><small>{item.status}</small></span></button>)}</div>}</Card></div></div>;
+export function PartyDetailPage() {
+  const { id } = useParams();
+  const { data } = useApp();
+  const navigate = useNavigate();
+  const party = data.parties.find((p) => p.id === id);
+  if (!party)
+    return (
+      <div className="page-stack">
+        <PageHeader
+          title="Contact not found"
+          description="This contact is not available in your workspace."
+          back={
+            <Link className="back-link" to="/customers">
+              ← Back to contacts
+            </Link>
+          }
+        />
+      </div>
+    );
+  const isCustomer = party.type === "Customer" || party.type === "Both";
+  const isVendor = party.type === "Vendor" || party.type === "Both";
+  const invoices = data.invoices.filter((i) => i.partyId === party.id);
+  const bills = data.bills.filter((b) => b.partyId === party.id);
+  const openBalance =
+    (isCustomer ? invoices.reduce((s, i) => s + Number(i.balance), 0) : 0) +
+    (isVendor ? bills.reduce((s, b) => s + Number(b.balance), 0) : 0);
+  return (
+    <div className="page-stack">
+      <PageHeader
+        title={party.name}
+        description={`${party.company || party.type} · ${party.type}`}
+        back={
+          <Link
+            className="back-link"
+            to={isCustomer ? "/customers" : "/vendors"}
+          >
+            ← Back to contacts
+          </Link>
+        }
+        actions={
+          <>
+            {isCustomer && (
+              <Button
+                variant="secondary"
+                onClick={() => navigate(`/invoices/new?partyId=${party.id}`)}
+              >
+                Create invoice
+              </Button>
+            )}
+            {isVendor && (
+              <Button
+                onClick={() => navigate(`/bills/new?partyId=${party.id}`)}
+              >
+                Create bill
+              </Button>
+            )}
+          </>
+        }
+      />
+      <div className="stats-grid three">
+        <StatCard
+          label="Open balance"
+          value={money(openBalance, data.settings.currency, 0)}
+          detail={
+            party.type === "Both"
+              ? "Across receivables and payables"
+              : isCustomer
+                ? "Open receivables"
+                : "Open payables"
+          }
+          icon={<Wallet size={17} />}
+          tone="blue"
+        />
+        <StatCard
+          label="Invoices"
+          value={String(invoices.length)}
+          detail={`${invoices.filter((i) => i.status === "Paid").length} paid`}
+          icon={<ArrowRight size={17} />}
+          tone="green"
+        />
+        <StatCard
+          label="Bills"
+          value={String(bills.length)}
+          detail={`${bills.filter((b) => b.status === "Paid").length} paid`}
+          icon={<Building2 size={17} />}
+          tone="amber"
+        />
+      </div>
+      <div className="detail-grid">
+        <Card>
+          <div className="card-heading">
+            <div>
+              <h2>Contact information</h2>
+              <p>Customer and supplier details</p>
+            </div>
+            <Badge tone={party.status === "Active" ? "success" : "neutral"}>
+              {party.status}
+            </Badge>
+          </div>
+          <div className="contact-detail-list">
+            <DetailLine
+              icon={<Building2 size={16} />}
+              label="Company"
+              value={party.company || "—"}
+            />
+            <DetailLine
+              icon={<Mail size={16} />}
+              label="Email"
+              value={party.email || "No email on file"}
+            />
+            <DetailLine
+              icon={<Phone size={16} />}
+              label="Phone"
+              value={party.phone || "No phone on file"}
+            />
+            <DetailLine
+              icon={<MapPin size={16} />}
+              label="Address"
+              value={party.address || "No address on file"}
+            />
+            <DetailLine
+              icon={<Building2 size={16} />}
+              label="Tax number"
+              value={party.taxNumber || "—"}
+            />
+          </div>
+          {party.notes && (
+            <div className="notes-panel">
+              <strong>Notes</strong>
+              <p>{party.notes}</p>
+            </div>
+          )}
+          <Button
+            variant="secondary"
+            onClick={() => navigate(`/ledger/${party.id}`)}
+          >
+            View financial ledger <ArrowRight size={15} />
+          </Button>
+        </Card>
+        <Card>
+          <div className="card-heading">
+            <div>
+              <h2>Recent financial records</h2>
+              <p>Invoices and bills linked to this contact</p>
+            </div>
+          </div>
+          {invoices.length === 0 && bills.length === 0 ? (
+            <div className="muted-panel-text">
+              No invoices or bills linked to this contact yet.
+            </div>
+          ) : (
+            <div className="record-list">
+              {invoices.map((item) => (
+                <button
+                  key={item.id}
+                  className="record-list-row"
+                  onClick={() => navigate(`/invoices/${item.id}`)}
+                >
+                  <span className="record-icon invoice">
+                    <ArrowRight size={16} />
+                  </span>
+                  <span className="record-info">
+                    <strong>{item.number}</strong>
+                    <small>Invoice · Due {formatDate(item.dueDate)}</small>
+                  </span>
+                  <span className="record-value">
+                    <strong>{money(item.total, data.settings.currency)}</strong>
+                    <small>{item.status}</small>
+                  </span>
+                </button>
+              ))}
+              {bills.map((item) => (
+                <button
+                  key={item.id}
+                  className="record-list-row"
+                  onClick={() => navigate(`/bills/${item.id}`)}
+                >
+                  <span className="record-icon bill">
+                    <ArrowRight size={16} />
+                  </span>
+                  <span className="record-info">
+                    <strong>{item.number}</strong>
+                    <small>Bill · Due {formatDate(item.dueDate)}</small>
+                  </span>
+                  <span className="record-value">
+                    <strong>{money(item.total, data.settings.currency)}</strong>
+                    <small>{item.status}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
 }
-function DetailLine({icon,label,value}:{icon:ReactNode;label:string;value:string}){return <div className="contact-detail-line"><span className="contact-line-icon">{icon}</span><div><small>{label}</small><strong>{value}</strong></div></div>}
+function DetailLine({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="contact-detail-line">
+      <span className="contact-line-icon">{icon}</span>
+      <div>
+        <small>{label}</small>
+        <strong>{value}</strong>
+      </div>
+    </div>
+  );
+}

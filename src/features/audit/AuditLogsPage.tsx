@@ -1,10 +1,215 @@
-import { useMemo, useState } from 'react';
-import { createColumnHelper } from '@tanstack/react-table';
-import { Activity, FileSearch, Search, ShieldAlert } from 'lucide-react';
-import { useApp } from '@/context/AppContext';
-import { formatDateTime } from '@/lib/utils';
-import type { AuditLog } from '@/types';
-import { Badge, Button, Card, DataTable, Dialog, Field, Input, PageHeader, Select, StatCard, SearchBox } from '@/components/ui';
-const helper=createColumnHelper<AuditLog>();
-export default function AuditLogsPage(){const{data}=useApp();const[search,setSearch]=useState('');const[code,setCode]=useState('All');const[method,setMethod]=useState('All');const[detail,setDetail]=useState<AuditLog|null>(null);const rows=useMemo(()=>data.auditLogs.filter(l=>(code==='All'||String(l.statusCode)===code)&&(method==='All'||l.method===method)&&`${l.action} ${l.user} ${l.path} ${l.resourceType||''} ${l.resourceId||''}`.toLowerCase().includes(search.toLowerCase())),[data.auditLogs,code,method,search]);const columns=[helper.accessor('createdAt',{header:'Date and time',cell:i=><span>{formatDateTime(i.getValue())}</span>}),helper.accessor('user',{header:'User',cell:i=><strong>{i.getValue()}</strong>}),helper.accessor('action',{header:'Action',cell:i=><div className="table-primary-cell"><strong className="mono-cell">{i.getValue()}</strong><small>{i.row.original.resourceType||'—'}{i.row.original.resourceId?` · ${i.row.original.resourceId}`:''}</small></div>}),helper.accessor('method',{header:'HTTP',cell:i=><Badge tone="neutral" className="mono-badge">{i.getValue()}</Badge>}),helper.accessor('path',{header:'Path',cell:i=><span className="mono-cell path-cell">{i.getValue()}</span>}),helper.accessor('statusCode',{header:'Response',cell:i=><Badge tone={i.getValue()<300?'success':i.getValue()<400?'info':'danger'}>{i.getValue()}</Badge>}),helper.accessor('ip',{header:'IP address',cell:i=><span className="mono-cell">{i.getValue()||'—'}</span>}),helper.display({id:'action-detail',header:'',cell:i=><Button size="sm" variant="ghost" onClick={()=>setDetail(i.row.original)}>Details</Button>})];return <div className="page-stack"><PageHeader title="Audit logs" description="Review security and operational activity for this workspace."/><div className="stats-grid three"><StatCard label="Log entries" value={String(data.auditLogs.length)} detail="Sample activity records" icon={<Activity size={17}/>} tone="blue"/><StatCard label="Successful responses" value={String(data.auditLogs.filter(l=>l.statusCode<400).length)} detail="Status code below 400" icon={<FileSearch size={17}/>} tone="green"/><StatCard label="Denied / error responses" value={String(data.auditLogs.filter(l=>l.statusCode>=400).length)} detail="Review access failures" icon={<ShieldAlert size={17}/>} tone="amber"/></div><Card className="list-card"><div className="list-toolbar"><SearchBox value={search} onChange={setSearch} placeholder="Search action, user, path, resource…"/><div className="toolbar-actions"><Select value={method} onChange={e=>setMethod(e.target.value)}><option>All</option><option>GET</option><option>POST</option><option>PATCH</option><option>DELETE</option></Select><Select value={code} onChange={e=>setCode(e.target.value)}><option>All</option><option value="200">200</option><option value="201">201</option><option value="400">400</option><option value="403">403</option><option value="500">500</option></Select></div></div><DataTable columns={columns} data={rows} rowId={l=>l.id} emptyTitle="No log entries found" emptyDescription="Try changing your filters."/></Card><Dialog open={!!detail} onOpenChange={o=>!o&&setDetail(null)} title="Audit log detail" description={detail?.action||''} size="lg" footer={<Button variant="secondary" onClick={()=>setDetail(null)}>Close</Button>}>{detail&&<div className="detail-field-grid"><Detail label="Timestamp" value={formatDateTime(detail.createdAt)}/><Detail label="User" value={detail.user}/><Detail label="Action" value={detail.action}/><Detail label="HTTP method" value={detail.method}/><Detail label="Path" value={detail.path}/><Detail label="Status code" value={String(detail.statusCode)}/><Detail label="Resource type" value={detail.resourceType||'—'}/><Detail label="Resource ID" value={detail.resourceId||'—'}/><Detail label="IP address" value={detail.ip||'—'}/><div className="detail-field full-span"><span>Metadata</span><strong>{detail.metadata||'No metadata recorded.'}</strong></div></div>}</Dialog></div>}
-function Detail({label,value}:{label:string;value:string}){return <div className="detail-field"><span>{label}</span><strong>{value}</strong></div>}
+import { useMemo, useState } from "react";
+import { createColumnHelper } from "@tanstack/react-table";
+import { Activity, FileSearch, Search, ShieldAlert } from "lucide-react";
+import { useApp } from "@/context/AppContext";
+import { formatDateTime } from "@/lib/utils";
+import type { AuditLog } from "@/types";
+import {
+  Badge,
+  Button,
+  Card,
+  DataTable,
+  Dialog,
+  Field,
+  Input,
+  PageHeader,
+  Select,
+  StatCard,
+  SearchBox,
+} from "@/components/ui";
+const helper = createColumnHelper<AuditLog>();
+export default function AuditLogsPage() {
+  const { data } = useApp();
+  const [search, setSearch] = useState("");
+  const [code, setCode] = useState("All");
+  const [method, setMethod] = useState("All");
+  const [detail, setDetail] = useState<AuditLog | null>(null);
+  const rows = useMemo(
+    () =>
+      data.auditLogs.filter(
+        (l) =>
+          (code === "All" || String(l.statusCode) === code) &&
+          (method === "All" || l.method === method) &&
+          `${l.action} ${l.user} ${l.path} ${l.resourceType || ""} ${l.resourceId || ""}`
+            .toLowerCase()
+            .includes(search.toLowerCase()),
+      ),
+    [data.auditLogs, code, method, search],
+  );
+  const columns = [
+    helper.accessor("createdAt", {
+      header: "Date and time",
+      cell: (i) => <span>{formatDateTime(i.getValue())}</span>,
+    }),
+    helper.accessor("user", {
+      header: "User",
+      cell: (i) => <strong>{i.getValue()}</strong>,
+    }),
+    helper.accessor("action", {
+      header: "Action",
+      cell: (i) => (
+        <div className="table-primary-cell">
+          <strong className="mono-cell">{i.getValue()}</strong>
+          <small>
+            {i.row.original.resourceType || "—"}
+            {i.row.original.resourceId ? ` · ${i.row.original.resourceId}` : ""}
+          </small>
+        </div>
+      ),
+    }),
+    helper.accessor("method", {
+      header: "HTTP",
+      cell: (i) => (
+        <Badge tone="neutral" className="mono-badge">
+          {i.getValue()}
+        </Badge>
+      ),
+    }),
+    helper.accessor("path", {
+      header: "Path",
+      cell: (i) => <span className="mono-cell path-cell">{i.getValue()}</span>,
+    }),
+    helper.accessor("statusCode", {
+      header: "Response",
+      cell: (i) => (
+        <Badge
+          tone={
+            i.getValue() < 300
+              ? "success"
+              : i.getValue() < 400
+                ? "info"
+                : "danger"
+          }
+        >
+          {i.getValue()}
+        </Badge>
+      ),
+    }),
+    helper.accessor("ip", {
+      header: "IP address",
+      cell: (i) => <span className="mono-cell">{i.getValue() || "—"}</span>,
+    }),
+    helper.display({
+      id: "action-detail",
+      header: "",
+      cell: (i) => (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setDetail(i.row.original)}
+        >
+          Details
+        </Button>
+      ),
+    }),
+  ];
+  return (
+    <div className="page-stack">
+      <PageHeader
+        title="Audit logs"
+        description="Review security and operational activity for this workspace."
+      />
+      <div className="stats-grid three">
+        <StatCard
+          label="Log entries"
+          value={String(data.auditLogs.length)}
+          detail="Sample activity records"
+          icon={<Activity size={17} />}
+          tone="blue"
+        />
+        <StatCard
+          label="Successful responses"
+          value={String(
+            data.auditLogs.filter((l) => l.statusCode < 400).length,
+          )}
+          detail="Status code below 400"
+          icon={<FileSearch size={17} />}
+          tone="green"
+        />
+        <StatCard
+          label="Denied / error responses"
+          value={String(
+            data.auditLogs.filter((l) => l.statusCode >= 400).length,
+          )}
+          detail="Review access failures"
+          icon={<ShieldAlert size={17} />}
+          tone="amber"
+        />
+      </div>
+      <Card className="list-card">
+        <div className="list-toolbar">
+          <SearchBox
+            value={search}
+            onChange={setSearch}
+            placeholder="Search action, user, path, resource…"
+          />
+          <div className="toolbar-actions">
+            <Select value={method} onChange={(e) => setMethod(e.target.value)}>
+              <option>All</option>
+              <option>GET</option>
+              <option>POST</option>
+              <option>PATCH</option>
+              <option>DELETE</option>
+            </Select>
+            <Select value={code} onChange={(e) => setCode(e.target.value)}>
+              <option>All</option>
+              <option value="200">200</option>
+              <option value="201">201</option>
+              <option value="400">400</option>
+              <option value="403">403</option>
+              <option value="500">500</option>
+            </Select>
+          </div>
+        </div>
+        <DataTable
+          columns={columns}
+          data={rows}
+          rowId={(l) => l.id}
+          emptyTitle="No log entries found"
+          emptyDescription="Try changing your filters."
+        />
+      </Card>
+      <Dialog
+        open={!!detail}
+        onOpenChange={(o) => !o && setDetail(null)}
+        title="Audit log detail"
+        description={detail?.action || ""}
+        size="lg"
+        footer={
+          <Button variant="secondary" onClick={() => setDetail(null)}>
+            Close
+          </Button>
+        }
+      >
+        {detail && (
+          <div className="detail-field-grid">
+            <Detail
+              label="Timestamp"
+              value={formatDateTime(detail.createdAt)}
+            />
+            <Detail label="User" value={detail.user} />
+            <Detail label="Action" value={detail.action} />
+            <Detail label="HTTP method" value={detail.method} />
+            <Detail label="Path" value={detail.path} />
+            <Detail label="Status code" value={String(detail.statusCode)} />
+            <Detail label="Resource type" value={detail.resourceType || "—"} />
+            <Detail label="Resource ID" value={detail.resourceId || "—"} />
+            <Detail label="IP address" value={detail.ip || "—"} />
+            <div className="detail-field full-span">
+              <span>Metadata</span>
+              <strong>{detail.metadata || "No metadata recorded."}</strong>
+            </div>
+          </div>
+        )}
+      </Dialog>
+    </div>
+  );
+}
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="detail-field">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
